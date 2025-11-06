@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/send-text",
+      "destination": "/api/send-text"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
