@@ -11,7 +11,7 @@ Sistema de envio de mensagens WhatsApp com suporte a **múltiplas instâncias is
 https://agoyetuktxaknbonkwzz.supabase.co/functions/v1/send-text
 ```
 
-### Opção 2: Cloudflare Worker (Domínio Customizad)
+### Opção 2: Cloudflare Worker (Domínio Customizado)
 ```
 https://api.evasend.com.br/whatsapp/send-text
 ```
