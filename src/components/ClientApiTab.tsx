@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Check, Code, Send, Smartphone, Image, Shield, Info } from 'lucide-react';
+import { Copy, Check, ChevronRight, Send, Image, Smartphone, Shield, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -11,6 +11,8 @@ interface WhatsAppInstance {
   phone_number: string | null;
 }
 
+type EndpointType = 'send-text' | 'send-media';
+
 export default function ClientApiTab() {
   const { user } = useAuth();
   const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
@@ -21,11 +23,11 @@ export default function ClientApiTab() {
   const [isLoading, setIsLoading] = useState(false);
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointType>('send-text');
+  const [activeTab, setActiveTab] = useState<'try' | 'code'>('try');
 
-  const displayApiUrl = 'https://api.evasend.com.br/whatsapp/send-text';
-  const actualApiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-text`;
-  const displayMediaUrl = 'https://api.evasend.com.br/whatsapp/send-media';
-  const actualMediaUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-media`;
+  const displayApiUrl = 'https://api.evasend.com.br/whatsapp';
+  const actualApiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
   useEffect(() => {
     if (user) {
@@ -67,7 +69,8 @@ export default function ClientApiTab() {
     setTestResponse('');
 
     try {
-      const response = await fetch(actualApiUrl, {
+      const endpoint = selectedEndpoint === 'send-text' ? 'send-text' : 'send-media';
+      const response = await fetch(`${actualApiUrl}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,467 +91,462 @@ export default function ClientApiTab() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'connected':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'connecting':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+  const endpoints = [
+    {
+      id: 'administracao' as const,
+      label: 'Administração',
+      count: 5,
+      children: []
+    },
+    {
+      id: 'instancia' as const,
+      label: 'Instancia',
+      count: 8,
+      children: []
+    },
+    {
+      id: 'perfil' as const,
+      label: 'Perfil',
+      count: 2,
+      children: []
+    },
+    {
+      id: 'enviar-mensagem' as const,
+      label: 'Enviar Mensagem',
+      count: 11,
+      children: [
+        { id: 'send-text' as EndpointType, label: 'Enviar mensagem de texto', method: 'POST' },
+        { id: 'send-media' as EndpointType, label: 'Enviar mídia (imagem, vídeo, áudio ou documento)', method: 'POST' },
+      ]
+    }
+  ];
+
+  const endpointData = {
+    'send-text': {
+      title: 'Enviar mensagem de texto',
+      description: 'Envia uma mensagem de texto para um contato ou grupo.',
+      method: 'POST',
+      path: '/send/text',
+      icon: Send,
+      color: 'cyan',
+      features: [
+        'Preview de links com suporte a personalização automática ou customizada',
+        'Formatação básica do texto',
+        'Substituição automática de placeholders dinâmicos'
+      ],
+      params: [
+        { name: 'number', type: 'string', required: true, description: 'Número de telefone com código do país (ex: 5511999999999)' },
+        { name: 'text', type: 'string', required: true, description: 'Mensagem de texto a ser enviada' }
+      ],
+      exampleRequest: {
+        number: "5511999999999",
+        text: "Olá! Como posso ajudar?"
+      },
+      exampleResponse: {
+        success: true,
+        messageId: "3EB0123456789ABCDEF",
+        timestamp: 1699564800
+      }
+    },
+    'send-media': {
+      title: 'Enviar mídia (imagem, vídeo, áudio ou documento)',
+      description: 'Envia arquivos de mídia com caption opcional.',
+      method: 'POST',
+      path: '/send/media',
+      icon: Image,
+      color: 'green',
+      features: [
+        'Suporte para imagem, vídeo, documento, áudio',
+        'Caption com formatação e placeholders',
+        'Base64 ou URL para arquivo'
+      ],
+      params: [
+        { name: 'number', type: 'string', required: true, description: 'Número com código do país' },
+        { name: 'type', type: 'string', required: true, description: 'image, video, document, audio, myaudio, ptt, sticker' },
+        { name: 'file', type: 'string', required: true, description: 'URL ou base64 do arquivo' },
+        { name: 'text', type: 'string', required: false, description: 'Caption/legenda (aceita placeholders)' },
+        { name: 'docName', type: 'string', required: false, description: 'Nome do arquivo (apenas para documents)' }
+      ],
+      exampleRequest: {
+        number: "5511999999999",
+        type: "image",
+        file: "https://exemplo.com/foto.jpg",
+        text: "Veja esta foto!"
+      },
+      exampleResponse: {
+        success: true,
+        messageId: "3EB0123456789ABCDEF",
+        timestamp: 1699564800
+      }
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'connected':
-        return 'Conectada';
-      case 'connecting':
-        return 'Conectando';
-      default:
-        return 'Desconectada';
-    }
-  };
+  const currentEndpoint = endpointData[selectedEndpoint];
+  const IconComponent = currentEndpoint.icon;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Documentação da API</h2>
-        <p className="text-gray-600">
-          Integre facilmente o envio de mensagens WhatsApp em sua aplicação. Suporte para texto e mídia.
-        </p>
-      </div>
+    <div className="flex h-full bg-slate-950">
+      {/* Sidebar */}
+      <div className="w-80 bg-slate-900 border-r border-slate-800 overflow-y-auto">
+        <div className="p-4 border-b border-slate-800">
+          <h3 className="text-sm font-semibold text-slate-400 mb-1">ENDPOINTS</h3>
+          <div className="text-2xl font-bold text-white">91</div>
+        </div>
 
-      {/* Rate Limiting Info */}
-      <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200">
-        <div className="flex items-start space-x-3">
-          <Shield className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-purple-900 mb-2">Rate Limiting</h3>
-            <p className="text-sm text-purple-800 mb-3">
-              O sistema implementa proteção contra abuso com limites de requisições:
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="bg-white rounded-lg p-3 border border-purple-200">
-                <p className="text-xs font-semibold text-purple-700 mb-1">Limite por IP</p>
-                <p className="text-lg font-bold text-purple-900">1.000 req/min</p>
-              </div>
-              <div className="bg-white rounded-lg p-3 border border-purple-200">
-                <p className="text-xs font-semibold text-purple-700 mb-1">Limite por Token</p>
-                <p className="text-lg font-bold text-purple-900">1.000 req/min</p>
-              </div>
+        <div className="p-2">
+          {endpoints.map((group) => (
+            <div key={group.id} className="mb-1">
+              <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                <div className="flex items-center space-x-2">
+                  <ChevronRight className="w-4 h-4" />
+                  <span>{group.label}</span>
+                </div>
+                <span className="text-xs text-slate-500">{group.count}</span>
+              </button>
+
+              {group.children.length > 0 && (
+                <div className="ml-4 mt-1 space-y-1">
+                  {group.children.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => setSelectedEndpoint(child.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors ${
+                        selectedEndpoint === child.id
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-400 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className="text-left text-xs">{child.label}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                        child.id === 'send-text' ? 'bg-cyan-500 text-white' : 'bg-green-500 text-white'
+                      }`}>
+                        {child.method}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="mt-3 bg-white rounded-lg p-3 border border-purple-200">
-              <div className="flex items-start space-x-2">
-                <Info className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-purple-800">
-                  Todas as respostas incluem headers informativos: <code className="bg-purple-50 px-1 py-0.5 rounded">X-RateLimit-Limit</code>, <code className="bg-purple-50 px-1 py-0.5 rounded">X-RateLimit-Remaining</code>, <code className="bg-purple-50 px-1 py-0.5 rounded">X-RateLimit-Reset</code>
-                </p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
-      {!loadingInstances && instances.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b border-green-200">
-            <h3 className="font-semibold text-green-900 flex items-center">
-              <Smartphone className="w-5 h-5 mr-2" />
-              Tokens das Instâncias Conectadas
-            </h3>
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 border-b border-slate-700 px-8 py-6">
+          <div className="flex items-center space-x-3 mb-2">
+            <span className={`px-3 py-1 rounded-md text-sm font-bold ${
+              currentEndpoint.color === 'cyan' ? 'bg-cyan-500' : 'bg-green-500'
+            } text-white`}>
+              {currentEndpoint.method}
+            </span>
+            <h1 className="text-2xl font-bold text-white">{currentEndpoint.path}</h1>
           </div>
+          <h2 className="text-3xl font-bold text-white mb-2">{currentEndpoint.title}</h2>
+          <p className="text-slate-400">{currentEndpoint.description}</p>
+        </div>
 
-          <div className="p-6 space-y-4">
-            {instances.map((instance) => (
-              <div
-                key={instance.id}
-                className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Smartphone className="w-5 h-5 text-gray-600" />
-                    <div>
-                      <p className="font-semibold text-gray-900">{instance.name}</p>
-                      {instance.phone_number && (
-                        <p className="text-sm text-gray-600">{instance.phone_number}</p>
+        <div className="grid grid-cols-2 divide-x divide-slate-800">
+          {/* Left Column - Documentation */}
+          <div className="p-8 space-y-8">
+            {/* Tokens Section */}
+            {!loadingInstances && instances.length > 0 && (
+              <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                <div className="bg-gradient-to-r from-green-900/30 to-green-800/30 px-6 py-4 border-b border-green-800/50">
+                  <h3 className="font-semibold text-green-400 flex items-center">
+                    <Smartphone className="w-5 h-5 mr-2" />
+                    Tokens das Instâncias
+                  </h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  {instances.slice(0, 2).map((instance) => (
+                    <div key={instance.id} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-400">{instance.name}</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          instance.status === 'connected'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-slate-700 text-slate-400'
+                        }`}>
+                          {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
+                        </span>
+                      </div>
+                      {instance.instance_token && instance.status === 'connected' && (
+                        <div className="bg-slate-800 rounded-lg p-3 flex items-center space-x-2">
+                          <code className="flex-1 text-xs text-slate-300 font-mono break-all">
+                            {instance.instance_token}
+                          </code>
+                          <button
+                            onClick={() => copyToClipboard(instance.instance_token!, `token-${instance.id}`)}
+                            className="p-1.5 hover:bg-slate-700 rounded transition-colors flex-shrink-0"
+                          >
+                            {copiedEndpoint === `token-${instance.id}` ? (
+                              <Check className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-slate-400" />
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(instance.status)}`}>
-                    {getStatusText(instance.status)}
-                  </span>
+                  ))}
                 </div>
+              </div>
+            )}
 
-                {instance.instance_token && instance.status === 'connected' ? (
-                  <div className="bg-white rounded-lg p-3 border border-gray-300">
-                    <label className="block text-xs font-semibold text-gray-700 mb-2">Token da Instância</label>
-                    <div className="flex items-center space-x-2">
-                      <code className="flex-1 font-mono text-sm text-gray-800 break-all">
-                        {instance.instance_token}
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(instance.instance_token!, `token-${instance.id}`)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-                      >
-                        {copiedEndpoint === `token-${instance.id}` ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4 text-gray-600" />
+            {/* Rate Limiting */}
+            <div className="bg-slate-900 rounded-xl border border-amber-800/50 overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 px-6 py-4 border-b border-amber-800/50">
+                <h3 className="font-semibold text-amber-400 flex items-center">
+                  <Shield className="w-5 h-5 mr-2" />
+                  Rate Limiting
+                </h3>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-slate-400 mb-4">
+                  Proteção contra abuso com limites de requisições:
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-800 rounded-lg p-4 text-center">
+                    <div className="text-xs text-slate-500 mb-1">Limite por IP</div>
+                    <div className="text-2xl font-bold text-amber-400">1.000</div>
+                    <div className="text-xs text-slate-500">req/min</div>
+                  </div>
+                  <div className="bg-slate-800 rounded-lg p-4 text-center">
+                    <div className="text-xs text-slate-500 mb-1">Limite por Token</div>
+                    <div className="text-2xl font-bold text-amber-400">1.000</div>
+                    <div className="text-xs text-slate-500">req/min</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Features */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-3">Recursos Específicos</h3>
+              <ul className="space-y-2">
+                {currentEndpoint.features.map((feature, idx) => (
+                  <li key={idx} className="flex items-start space-x-2 text-sm text-slate-400">
+                    <span className="text-green-400 mt-0.5">•</span>
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Parameters */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">Campos Comuns</h3>
+              <div className="space-y-3">
+                {currentEndpoint.params.map((param) => (
+                  <div key={param.name} className="bg-slate-900 rounded-lg p-4 border border-slate-800">
+                    <div className="flex items-start justify-between mb-2">
+                      <code className="text-sm font-mono text-cyan-400">{param.name}</code>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-slate-500">{param.type}</span>
+                        {param.required && (
+                          <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs font-semibold">
+                            required
+                          </span>
                         )}
-                      </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-400">{param.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Example Response */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">Resposta de Exemplo</h3>
+              <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 relative">
+                <button
+                  onClick={() => copyToClipboard(JSON.stringify(currentEndpoint.exampleResponse, null, 2), 'response')}
+                  className="absolute top-3 right-3 p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  {copiedEndpoint === 'response' ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
+                <pre className="text-sm text-slate-300 font-mono">
+                  {JSON.stringify(currentEndpoint.exampleResponse, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Try It / Code */}
+          <div className="bg-slate-900">
+            {/* Tabs */}
+            <div className="flex border-b border-slate-800">
+              <button
+                onClick={() => setActiveTab('try')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                  activeTab === 'try'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-500'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Try It
+              </button>
+              <button
+                onClick={() => setActiveTab('code')}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                  activeTab === 'code'
+                    ? 'bg-slate-800 text-white border-b-2 border-cyan-500'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Code
+              </button>
+            </div>
+
+            <div className="p-6">
+              {activeTab === 'try' ? (
+                <div className="space-y-6">
+                  {/* Form */}
+                  <div>
+                    <div className="bg-cyan-500 text-white px-4 py-2 rounded-t-lg font-semibold text-sm">
+                      {currentEndpoint.method}
+                    </div>
+                    <div className="bg-slate-950 px-4 py-3 rounded-b-lg border border-slate-800 border-t-0">
+                      <div className="text-sm text-slate-400 font-mono">
+                        {displayApiUrl}{currentEndpoint.path}
+                      </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
-                    <p className="text-sm text-yellow-800">
-                      {instance.status === 'connected'
-                        ? 'Token não disponível para esta instância'
-                        : 'Conecte a instância para visualizar o token'}
-                    </p>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-300 mb-2">Subdomain</h4>
+                    <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value="sender"
+                          disabled
+                          className="flex-1 bg-transparent text-slate-400 text-sm outline-none"
+                        />
+                        <span className="text-slate-600">.uazapi.com</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
-        <div className="flex items-start space-x-3">
-          <Code className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" />
-          <div className="w-full">
-            <h3 className="font-semibold text-blue-900 mb-2">Base URL</h3>
+                  <div>
+                    <label className="text-sm font-semibold text-slate-300 mb-2 flex items-center">
+                      token
+                      <span className="ml-1 text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={testToken}
+                      onChange={(e) => setTestToken(e.target.value)}
+                      placeholder="Enter your token"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-300 text-sm placeholder-slate-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-colors"
+                    />
+                  </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-blue-800 mb-1">URL API (Produção)</label>
-                <div className="bg-white rounded-lg p-3 font-mono text-sm text-gray-800 flex items-center justify-between">
-                  <span className="break-all">{displayApiUrl}</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-slate-300">Body</h4>
+                      <button className="text-xs text-cyan-400 hover:text-cyan-300">+ Novo</button>
+                    </div>
+                    <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 font-mono text-sm">
+                      <div className="space-y-2">
+                        <div className="text-slate-400">
+                          <span className="text-cyan-400">"number"</span>:
+                          <input
+                            type="text"
+                            value={testNumber}
+                            onChange={(e) => setTestNumber(e.target.value)}
+                            className="ml-2 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-300 text-xs outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div className="text-slate-400">
+                          <span className="text-cyan-400">"text"</span>:
+                          <input
+                            type="text"
+                            value={testMessage}
+                            onChange={(e) => setTestMessage(e.target.value)}
+                            className="ml-2 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-300 text-xs outline-none focus:border-cyan-500 w-64"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <button
-                    onClick={() => copyToClipboard(displayApiUrl, 'display-url')}
-                    className="ml-3 p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                    onClick={handleTest}
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold py-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                   >
-                    {copiedEndpoint === 'display-url' ? (
-                      <Check className="w-4 h-4 text-green-600" />
+                    {isLoading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Sending...</span>
+                      </>
                     ) : (
-                      <Copy className="w-4 h-4 text-gray-600" />
+                      <>
+                        <Zap className="w-5 h-5" />
+                        <span>Send API Request</span>
+                      </>
                     )}
                   </button>
+
+                  {testResponse && (
+                    <div>
+                      <div className="text-sm font-semibold text-slate-300 mb-2">Response</div>
+                      <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 max-h-64 overflow-y-auto">
+                        {testResponse === '' ? (
+                          <div className="text-center py-8 text-slate-500 text-sm">
+                            No response yet<br />
+                            Send a request to see the actual response
+                          </div>
+                        ) : (
+                          <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap">
+                            {testResponse}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+              ) : (
+                <div>
+                  <div className="mb-4">
+                    <select className="bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-slate-300 text-sm outline-none">
+                      <option>cURL</option>
+                      <option>JavaScript</option>
+                      <option>Python</option>
+                    </select>
+                  </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900 flex items-center">
-            <Send className="w-5 h-5 mr-2" />
-            POST /send-text
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">Enviar mensagem de texto via WhatsApp</p>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Headers</h4>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2 font-mono text-sm">
-              <div className="flex items-center">
-                <span className="text-blue-600 font-semibold w-40">Content-Type:</span>
-                <span className="text-gray-800">application/json</span>
-              </div>
-              <div className="flex items-center">
-                <span className="text-blue-600 font-semibold w-40">token:</span>
-                <span className="text-gray-800">seu_token_de_autenticacao</span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Body (JSON)</h4>
-            <div className="bg-gray-900 rounded-lg p-4 relative overflow-x-auto">
-              <button
-                onClick={() => copyToClipboard('{\n  "number": "5511999999999",\n  "text": "Olá! Como posso ajudar?"\n}', 'body')}
-                className="absolute top-3 right-3 p-2 hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                {copiedEndpoint === 'body' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
-              <pre className="text-sm text-gray-100">
-{`{
-  "number": "5511999999999",
-  "text": "Olá! Como posso ajudar?"
-}`}
-              </pre>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Parâmetros</h4>
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Campo</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Tipo</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Descrição</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">number</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Número de telefone com código do país (ex: 5511999999999)</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">text</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Mensagem de texto a ser enviada</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Exemplo cURL</h4>
-            <div className="bg-gray-900 rounded-lg p-4 relative overflow-x-auto">
-              <button
-                onClick={() => copyToClipboard(`curl --request POST \\\n  --url ${displayApiUrl} \\\n  --header 'Content-Type: application/json' \\\n  --header 'token: seu_token_aqui' \\\n  --data '{\n  "number": "5511999999999",\n  "text": "Olá! Como posso ajudar?"\n}'`, 'curl')}
-                className="absolute top-3 right-3 p-2 hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                {copiedEndpoint === 'curl' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
-              <pre className="text-sm text-gray-100 whitespace-pre-wrap">
+                  <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 relative">
+                    <button
+                      onClick={() => copyToClipboard(`curl --request POST \\\n  --url ${displayApiUrl}${currentEndpoint.path} \\\n  --header 'Content-Type: application/json' \\\n  --header 'token: seu_token_aqui' \\\n  --data '${JSON.stringify(currentEndpoint.exampleRequest, null, 2)}'`, 'curl-code')}
+                      className="absolute top-3 right-3 p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                      {copiedEndpoint === 'curl-code' ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-slate-400" />
+                      )}
+                    </button>
+                    <pre className="text-sm text-slate-300 font-mono whitespace-pre-wrap pr-12">
 {`curl --request POST \\
-  --url ${displayApiUrl} \\
+  --url ${displayApiUrl}${currentEndpoint.path} \\
   --header 'Content-Type: application/json' \\
   --header 'token: seu_token_aqui' \\
-  --data '{
-  "number": "5511999999999",
-  "text": "Olá! Como posso ajudar?"
-}'`}
-              </pre>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Send Media Endpoint */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900 flex items-center">
-            <Image className="w-5 h-5 mr-2" />
-            POST /send-media
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">Enviar mídia (imagem, vídeo, documento, áudio, sticker) via WhatsApp</p>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Headers</h4>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2 font-mono text-sm">
-              <div className="flex items-center">
-                <span className="text-blue-600 font-semibold w-40">Content-Type:</span>
-                <span className="text-gray-800">application/json</span>
-              </div>
-              <div className="flex items-center">
-                <span className="text-blue-600 font-semibold w-40">token:</span>
-                <span className="text-gray-800">seu_token_de_autenticacao</span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Body (JSON)</h4>
-            <div className="bg-gray-900 rounded-lg p-4 relative overflow-x-auto">
-              <button
-                onClick={() => copyToClipboard('{\n  "number": "5511999999999",\n  "type": "image",\n  "file": "https://exemplo.com/foto.jpg",\n  "text": "Veja esta foto!"\n}', 'media-body')}
-                className="absolute top-3 right-3 p-2 hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                {copiedEndpoint === 'media-body' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
-              <pre className="text-sm text-gray-100">
-{`{
-  "number": "5511999999999",
-  "type": "image",
-  "file": "https://exemplo.com/foto.jpg",
-  "text": "Veja esta foto!"
-}`}
-              </pre>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Parâmetros Principais</h4>
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Campo</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Tipo</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Obrigatório</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Descrição</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">number</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600"><span className="text-red-600 font-semibold">Sim</span></td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Número com código do país</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">type</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600"><span className="text-red-600 font-semibold">Sim</span></td>
-                    <td className="px-4 py-3 text-sm text-gray-600">image, video, document, audio, myaudio, ptt, sticker</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">file</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600"><span className="text-red-600 font-semibold">Sim</span></td>
-                    <td className="px-4 py-3 text-sm text-gray-600">URL ou base64 do arquivo</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">text</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Não</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Caption/legenda (aceita placeholders)</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 text-sm font-mono text-blue-600">docName</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">string</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Não</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Nome do arquivo (apenas para documents)</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Tipos de Mídia Suportados</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {['image', 'video', 'document', 'audio', 'myaudio', 'ptt', 'sticker'].map((type) => (
-                <div key={type} className="bg-gray-50 rounded-lg p-3 border border-gray-200 text-center">
-                  <p className="text-sm font-mono text-gray-800">{type}</p>
+  --data '${JSON.stringify(currentEndpoint.exampleRequest, null, 2)}'`}
+                    </pre>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
-
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Exemplo cURL</h4>
-            <div className="bg-gray-900 rounded-lg p-4 relative overflow-x-auto">
-              <button
-                onClick={() => copyToClipboard(`curl --request POST \\\n  --url ${displayMediaUrl} \\\n  --header 'Content-Type: application/json' \\\n  --header 'token: seu_token_aqui' \\\n  --data '{\n  "number": "5511999999999",\n  "type": "image",\n  "file": "https://exemplo.com/foto.jpg",\n  "text": "Veja esta foto!"\n}'`, 'media-curl')}
-                className="absolute top-3 right-3 p-2 hover:bg-gray-800 rounded-lg transition-colors"
-              >
-                {copiedEndpoint === 'media-curl' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
-              <pre className="text-sm text-gray-100 whitespace-pre-wrap">
-{`curl --request POST \\
-  --url ${displayMediaUrl} \\
-  --header 'Content-Type: application/json' \\
-  --header 'token: seu_token_aqui' \\
-  --data '{
-  "number": "5511999999999",
-  "type": "image",
-  "file": "https://exemplo.com/foto.jpg",
-  "text": "Veja esta foto!"
-}'`}
-              </pre>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
-          <h3 className="font-semibold text-white flex items-center">
-            <Send className="w-5 h-5 mr-2" />
-            Testar API
-          </h3>
-        </div>
-
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Token</label>
-            <input
-              type="text"
-              value={testToken}
-              onChange={(e) => setTestToken(e.target.value)}
-              placeholder="Seu token de autenticação"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Número</label>
-            <input
-              type="text"
-              value={testNumber}
-              onChange={(e) => setTestNumber(e.target.value)}
-              placeholder="5511999999999"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Mensagem</label>
-            <textarea
-              value={testMessage}
-              onChange={(e) => setTestMessage(e.target.value)}
-              placeholder="Olá! Como posso ajudar?"
-              rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <button
-            onClick={handleTest}
-            disabled={isLoading}
-            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Enviando...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-5 h-5" />
-                <span>Enviar Teste</span>
-              </>
-            )}
-          </button>
-
-          {testResponse && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resposta</label>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                <pre className="text-sm text-gray-100">{testResponse}</pre>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
