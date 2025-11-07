@@ -14,7 +14,7 @@ interface WhatsAppInstance {
   phone_number: string | null;
 }
 
-type EndpointType = 'send-text' | 'send-media';
+type EndpointType = 'send-text' | 'send-media' | 'send-menu' | 'send-carousel' | 'send-pix-button' | 'send-status';
 
 export default function ClientApiTab() {
   const { user } = useAuth();
@@ -77,24 +77,74 @@ export default function ClientApiTab() {
     setTestResponse('');
 
     try {
-      const endpoint = selectedEndpoint === 'send-text' ? 'send-text' : 'send-media';
+      let body: any = {};
 
-      let body: any = {
-        number: testNumber,
-      };
-
-      if (selectedEndpoint === 'send-text') {
-        body.text = testMessage;
-      } else {
-        body.type = mediaType;
-        body.file = mediaFile;
-        body.text = mediaCaption;
-        if (mediaType === 'document') {
-          body.docName = docName;
-        }
+      // Construir body baseado no endpoint selecionado
+      switch (selectedEndpoint) {
+        case 'send-text':
+          body = {
+            number: testNumber,
+            text: testMessage,
+          };
+          break;
+        case 'send-media':
+          body = {
+            number: testNumber,
+            type: mediaType,
+            file: mediaFile,
+            text: mediaCaption,
+          };
+          if (mediaType === 'document') {
+            body.docName = docName;
+          }
+          break;
+        case 'send-menu':
+          body = {
+            number: testNumber,
+            type: 'button',
+            text: testMessage,
+            choices: ['Opção 1|op1', 'Opção 2|op2', 'Opção 3|op3'],
+            footerText: 'Escolha uma opção',
+          };
+          break;
+        case 'send-carousel':
+          body = {
+            number: testNumber,
+            text: testMessage,
+            carousel: [
+              {
+                text: 'Produto Exemplo',
+                image: mediaFile || 'https://exemplo.com/imagem.jpg',
+                buttons: [
+                  {
+                    id: 'comprar',
+                    text: 'Comprar',
+                    type: 'REPLY',
+                  },
+                ],
+              },
+            ],
+          };
+          break;
+        case 'send-pix-button':
+          body = {
+            number: testNumber,
+            pixType: 'EVP',
+            pixKey: '123e4567-e89b-12d3-a456-426614174000',
+            pixName: 'Loja Exemplo',
+          };
+          break;
+        case 'send-status':
+          body = {
+            type: 'text',
+            text: testMessage,
+            background_color: 7,
+            font: 1,
+          };
+          break;
       }
 
-      const response = await fetch(`${actualApiUrl}/${endpoint}`, {
+      const response = await fetch(`${actualApiUrl}/${selectedEndpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,10 +188,14 @@ export default function ClientApiTab() {
     {
       id: 'enviar-mensagem' as const,
       label: 'Enviar Mensagem',
-      count: 2,
+      count: 6,
       children: [
         { id: 'send-text' as EndpointType, label: 'Enviar mensagem de texto', method: 'POST' },
         { id: 'send-media' as EndpointType, label: 'Enviar mídia (imagem, vídeo, áudio ou documento)', method: 'POST' },
+        { id: 'send-menu' as EndpointType, label: 'Enviar menu interativo (botões, lista, enquete, carrossel)', method: 'POST' },
+        { id: 'send-carousel' as EndpointType, label: 'Enviar carrossel de mídia com botões', method: 'POST' },
+        { id: 'send-pix-button' as EndpointType, label: 'Enviar botão PIX', method: 'POST' },
+        { id: 'send-status' as EndpointType, label: 'Enviar Stories (Status)', method: 'POST' },
       ]
     }
   ];
@@ -215,7 +269,7 @@ export default function ClientApiTab() {
       <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto shadow-lg">
         <div className="p-4 border-b border-slate-200 bg-gradient-to-br from-blue-500 to-indigo-600">
           <h3 className="text-xs font-semibold text-blue-100 mb-1 tracking-wider uppercase">Endpoints</h3>
-          <div className="text-2xl font-bold text-white">2</div>
+          <div className="text-2xl font-bold text-white">6</div>
           <p className="text-xs text-blue-100 mt-0.5">Recursos disponíveis</p>
         </div>
 
@@ -493,7 +547,7 @@ export default function ClientApiTab() {
                             className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
-                        {selectedEndpoint === 'send-text' ? (
+                        {(selectedEndpoint === 'send-text' || selectedEndpoint === 'send-menu' || selectedEndpoint === 'send-status') && (
                           <div className="flex items-center space-x-2">
                             <span className="text-cyan-400 font-semibold">"text"</span>
                             <span className="text-slate-400">:</span>
@@ -504,7 +558,8 @@ export default function ClientApiTab() {
                               className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                             />
                           </div>
-                        ) : (
+                        )}
+                        {selectedEndpoint === 'send-media' && (
                           <>
                             <div className="flex items-center space-x-2">
                               <span className="text-cyan-400 font-semibold">"type"</span>

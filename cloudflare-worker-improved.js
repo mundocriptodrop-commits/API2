@@ -511,7 +511,7 @@ async function handleRequest(request, env = {}) {
     console.log(`[INFO] Processing endpoint - Original: ${url.pathname}, Processed: ${path}`);
     
     // Verifica se é um endpoint suportado
-    const supportedEndpoints = ['/send-text', '/send-media'];
+    const supportedEndpoints = ['/send-text', '/send-media', '/send-menu', '/send-carousel', '/send-pix-button', '/send-status'];
     if (!supportedEndpoints.includes(path)) {
       console.warn(`[WARN] Unsupported endpoint requested: ${path} (Original: ${url.pathname})`);
       return new Response(
@@ -604,6 +604,165 @@ async function handleRequest(request, env = {}) {
         return new Response(
           JSON.stringify({
             error: `Media type '${bodyData.type}' not supported. Supported types: ${supportedTypes.join(', ')}`,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
+    // Valida campos obrigatórios para send-menu
+    if (path === '/send-menu' || path.endsWith('/send-menu')) {
+      if (!bodyData.number) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'number' is required",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.type) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'type' is required (button, list, poll, carousel)",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.text) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'text' is required",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.choices || !Array.isArray(bodyData.choices) || bodyData.choices.length === 0) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'choices' is required and must be a non-empty array",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
+    // Valida campos obrigatórios para send-carousel
+    if (path === '/send-carousel' || path.endsWith('/send-carousel')) {
+      if (!bodyData.number) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'number' is required",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.text) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'text' is required",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.carousel || !Array.isArray(bodyData.carousel) || bodyData.carousel.length === 0) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'carousel' is required and must be a non-empty array",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
+    // Valida campos obrigatórios para send-pix-button
+    if (path === '/send-pix-button' || path.endsWith('/send-pix-button')) {
+      if (!bodyData.number) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'number' is required",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.pixType) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'pixType' is required (CPF, CNPJ, PHONE, EMAIL, EVP)",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (!bodyData.pixKey) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'pixKey' is required",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
+    // Valida campos obrigatórios para send-status
+    if (path === '/send-status' || path.endsWith('/send-status')) {
+      if (!bodyData.type) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'type' is required (text, image, video, audio)",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (bodyData.type === 'text' && !bodyData.text) {
+        return new Response(
+          JSON.stringify({
+            error: "Field 'text' is required for type='text'",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (bodyData.type !== 'text' && !bodyData.file) {
+        return new Response(
+          JSON.stringify({
+            error: `Field 'file' is required for type='${bodyData.type}'`,
           }),
           {
             status: 400,
