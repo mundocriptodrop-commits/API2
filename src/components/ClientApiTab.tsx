@@ -19,12 +19,17 @@ export default function ClientApiTab() {
   const [testNumber, setTestNumber] = useState('5511999999999');
   const [testMessage, setTestMessage] = useState('Olá! Como posso ajudar?');
   const [testToken, setTestToken] = useState('');
+  const [mediaType, setMediaType] = useState('image');
+  const [mediaFile, setMediaFile] = useState('https://exemplo.com/foto.jpg');
+  const [mediaCaption, setMediaCaption] = useState('Veja esta foto!');
+  const [docName, setDocName] = useState('documento.pdf');
   const [testResponse, setTestResponse] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointType>('send-text');
   const [activeTab, setActiveTab] = useState<'try' | 'code'>('try');
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(['enviar-mensagem']);
 
   const displayApiUrl = 'https://api.evasend.com.br/whatsapp';
   const actualApiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
@@ -70,16 +75,29 @@ export default function ClientApiTab() {
 
     try {
       const endpoint = selectedEndpoint === 'send-text' ? 'send-text' : 'send-media';
+
+      let body: any = {
+        number: testNumber,
+      };
+
+      if (selectedEndpoint === 'send-text') {
+        body.text = testMessage;
+      } else {
+        body.type = mediaType;
+        body.file = mediaFile;
+        body.text = mediaCaption;
+        if (mediaType === 'document') {
+          body.docName = docName;
+        }
+      }
+
       const response = await fetch(`${actualApiUrl}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'token': testToken,
         },
-        body: JSON.stringify({
-          number: testNumber,
-          text: testMessage,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -195,42 +213,56 @@ export default function ClientApiTab() {
         </div>
 
         <div className="p-3">
-          {endpoints.map((group) => (
-            <div key={group.id} className="mb-2">
-              <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 rounded-xl transition-all duration-200 font-medium">
-                <div className="flex items-center space-x-3">
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
-                  <span>{group.label}</span>
-                </div>
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{group.count}</span>
-              </button>
+          {endpoints.map((group) => {
+            const isExpanded = expandedGroups.includes(group.id);
+            const toggleGroup = () => {
+              setExpandedGroups(prev =>
+                prev.includes(group.id)
+                  ? prev.filter(id => id !== group.id)
+                  : [...prev, group.id]
+              );
+            };
 
-              {group.children.length > 0 && (
-                <div className="ml-4 mt-2 space-y-1">
-                  {group.children.map((child) => (
-                    <button
-                      key={child.id}
-                      onClick={() => setSelectedEndpoint(child.id)}
-                      className={`w-full flex items-center justify-between px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
-                        selectedEndpoint === child.id
-                          ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="text-left text-xs font-medium">{child.label}</span>
-                      <span className={`text-xs px-2.5 py-1 rounded-md font-bold ${
-                        child.id === 'send-text'
-                          ? selectedEndpoint === child.id ? 'bg-white/20 text-white' : 'bg-cyan-500 text-white'
-                          : selectedEndpoint === child.id ? 'bg-white/20 text-white' : 'bg-green-500 text-white'
-                      }`}>
-                        {child.method}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+            return (
+              <div key={group.id} className="mb-2">
+                <button
+                  onClick={toggleGroup}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 rounded-xl transition-all duration-200 font-medium"
+                >
+                  <div className="flex items-center space-x-3">
+                    <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                    <span>{group.label}</span>
+                  </div>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{group.count}</span>
+                </button>
+
+                {isExpanded && group.children.length > 0 && (
+                  <div className="ml-4 mt-2 space-y-1">
+                    {group.children.map((child) => (
+                      <button
+                        key={child.id}
+                        onClick={() => setSelectedEndpoint(child.id)}
+                        className={`w-full flex items-center justify-between px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
+                          selectedEndpoint === child.id
+                            ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="text-left text-xs font-medium">{child.label}</span>
+                        <span className={`text-xs px-2.5 py-1 rounded-md font-bold ${
+                          child.id === 'send-text'
+                            ? selectedEndpoint === child.id ? 'bg-white/20 text-white' : 'bg-cyan-500 text-white'
+                            : selectedEndpoint === child.id ? 'bg-white/20 text-white' : 'bg-green-500 text-white'
+                        }`}>
+                          {child.method}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -425,20 +457,6 @@ export default function ClientApiTab() {
                     </div>
                   </div>
 
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-700 mb-2">Subdomain</h4>
-                    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="text"
-                          value="sender"
-                          disabled
-                          className="flex-1 bg-transparent text-slate-500 text-sm outline-none font-mono"
-                        />
-                        <span className="text-slate-400">.evasend.com.br</span>
-                      </div>
-                    </div>
-                  </div>
 
                   <div>
                     <label className="text-sm font-bold text-slate-700 mb-2 flex items-center">
@@ -455,10 +473,7 @@ export default function ClientApiTab() {
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-bold text-slate-700">Body</h4>
-                      <button className="text-xs text-blue-600 hover:text-blue-700 font-semibold">+ Novo Campo</button>
-                    </div>
+                    <h4 className="text-sm font-bold text-slate-700 mb-2">Body</h4>
                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 font-mono text-sm shadow-lg">
                       <div className="space-y-3">
                         <div className="flex items-center space-x-2">
@@ -471,16 +486,73 @@ export default function ClientApiTab() {
                             className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                           />
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-cyan-400 font-semibold">"text"</span>
-                          <span className="text-slate-400">:</span>
-                          <input
-                            type="text"
-                            value={testMessage}
-                            onChange={(e) => setTestMessage(e.target.value)}
-                            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-                          />
-                        </div>
+                        {selectedEndpoint === 'send-text' ? (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-cyan-400 font-semibold">"text"</span>
+                            <span className="text-slate-400">:</span>
+                            <input
+                              type="text"
+                              value={testMessage}
+                              onChange={(e) => setTestMessage(e.target.value)}
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"type"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={mediaType}
+                                onChange={(e) => setMediaType(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="image">image</option>
+                                <option value="video">video</option>
+                                <option value="document">document</option>
+                                <option value="audio">audio</option>
+                                <option value="myaudio">myaudio</option>
+                                <option value="ptt">ptt</option>
+                                <option value="sticker">sticker</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"file"</span>
+                              <span className="text-slate-400">:</span>
+                              <input
+                                type="text"
+                                value={mediaFile}
+                                onChange={(e) => setMediaFile(e.target.value)}
+                                placeholder="URL ou base64"
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"text"</span>
+                              <span className="text-slate-400">:</span>
+                              <input
+                                type="text"
+                                value={mediaCaption}
+                                onChange={(e) => setMediaCaption(e.target.value)}
+                                placeholder="Caption/legenda"
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              />
+                            </div>
+                            {mediaType === 'document' && (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-cyan-400 font-semibold">"docName"</span>
+                                <span className="text-slate-400">:</span>
+                                <input
+                                  type="text"
+                                  value={docName}
+                                  onChange={(e) => setDocName(e.target.value)}
+                                  placeholder="Nome do arquivo"
+                                  className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                />
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
