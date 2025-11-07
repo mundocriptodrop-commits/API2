@@ -95,25 +95,25 @@ export default function ClientApiTab() {
     {
       id: 'administracao' as const,
       label: 'Administração',
-      count: 5,
+      count: 0,
       children: []
     },
     {
       id: 'instancia' as const,
       label: 'Instancia',
-      count: 8,
+      count: 0,
       children: []
     },
     {
       id: 'perfil' as const,
       label: 'Perfil',
-      count: 2,
+      count: 0,
       children: []
     },
     {
       id: 'enviar-mensagem' as const,
       label: 'Enviar Mensagem',
-      count: 11,
+      count: 2,
       children: [
         { id: 'send-text' as EndpointType, label: 'Enviar mensagem de texto', method: 'POST' },
         { id: 'send-media' as EndpointType, label: 'Enviar mídia (imagem, vídeo, áudio ou documento)', method: 'POST' },
@@ -188,10 +188,10 @@ export default function ClientApiTab() {
     <div className="flex h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Sidebar */}
       <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto shadow-lg">
-        <div className="p-6 border-b border-slate-200 bg-gradient-to-br from-blue-500 to-indigo-600">
-          <h3 className="text-xs font-bold text-blue-100 mb-2 tracking-wider uppercase">Endpoints</h3>
-          <div className="text-3xl font-bold text-white">91</div>
-          <p className="text-xs text-blue-100 mt-1">Recursos disponíveis</p>
+        <div className="p-4 border-b border-slate-200 bg-gradient-to-br from-blue-500 to-indigo-600">
+          <h3 className="text-xs font-semibold text-blue-100 mb-1 tracking-wider uppercase">Endpoints</h3>
+          <div className="text-2xl font-bold text-white">2</div>
+          <p className="text-xs text-blue-100 mt-0.5">Recursos disponíveis</p>
         </div>
 
         <div className="p-3">
