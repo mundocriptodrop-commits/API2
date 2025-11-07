@@ -222,7 +222,7 @@ export default function ClientApiTab() {
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-blue-800 mb-1">URL Cloudflare Worker (Produção)</label>
+                <label className="block text-xs font-semibold text-blue-800 mb-1">URL API (Produção)</label>
                 <div className="bg-white rounded-lg p-3 font-mono text-sm text-gray-800 flex items-center justify-between">
                   <span className="break-all">{displayApiUrl}</span>
                   <button
@@ -236,29 +236,6 @@ export default function ClientApiTab() {
                     )}
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-blue-800 mb-1">URL Edge Function (Direta)</label>
-                <div className="bg-white rounded-lg p-3 font-mono text-sm text-gray-800 flex items-center justify-between">
-                  <span className="break-all">{actualApiUrl}</span>
-                  <button
-                    onClick={() => copyToClipboard(actualApiUrl, 'actual-url')}
-                    className="ml-3 p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-                  >
-                    {copiedEndpoint === 'actual-url' ? (
-                      <Check className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-gray-600" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <p className="text-xs text-blue-900">
-                  <strong>Nota:</strong> Ambas as URLs funcionam. O Cloudflare Worker inclui rate limiting e cache. A Edge Function é mais direta e rápida.
-                </p>
               </div>
             </div>
           </div>
