@@ -300,26 +300,26 @@ export default function ClientApiTab() {
 
             {/* Rate Limiting */}
             <div className="bg-white rounded-2xl border border-orange-200 overflow-hidden shadow-lg">
-              <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4 border-b border-orange-400">
-                <h3 className="font-bold text-white flex items-center">
-                  <Shield className="w-5 h-5 mr-2" />
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-3 border-b border-orange-400">
+                <h3 className="font-bold text-white flex items-center text-sm">
+                  <Shield className="w-4 h-4 mr-2" />
                   Rate Limiting
                 </h3>
               </div>
-              <div className="p-6">
-                <p className="text-sm text-slate-600 mb-4">
+              <div className="p-5">
+                <p className="text-xs text-slate-600 mb-3">
                   Proteção contra abuso com limites de requisições:
                 </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-5 text-center border border-orange-200">
-                    <div className="text-xs text-slate-600 mb-2 font-medium">Limite por IP</div>
-                    <div className="text-3xl font-bold text-orange-600">1.000</div>
-                    <div className="text-xs text-slate-500 mt-1">req/min</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-3 text-center border border-orange-200">
+                    <div className="text-xs text-slate-600 mb-1 font-medium">Limite por IP</div>
+                    <div className="text-2xl font-bold text-orange-600">1.000</div>
+                    <div className="text-xs text-slate-500">req/min</div>
                   </div>
-                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-5 text-center border border-orange-200">
-                    <div className="text-xs text-slate-600 mb-2 font-medium">Limite por Token</div>
-                    <div className="text-3xl font-bold text-orange-600">1.000</div>
-                    <div className="text-xs text-slate-500 mt-1">req/min</div>
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-3 text-center border border-orange-200">
+                    <div className="text-xs text-slate-600 mb-1 font-medium">Limite por Token</div>
+                    <div className="text-2xl font-bold text-orange-600">1.000</div>
+                    <div className="text-xs text-slate-500">req/min</div>
                   </div>
                 </div>
               </div>
