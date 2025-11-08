@@ -320,11 +320,99 @@ export default function ClientApiTab() {
         file: "https://exemplo.com/foto.jpg",
         text: "Veja esta foto!"
       },
-      exampleResponse: {
-        success: true,
-        messageId: "3EB0123456789ABCDEF",
-        timestamp: 1699564800
-      }
+      responses: [
+        {
+          status: 200,
+          label: "Mídia enviada com sucesso",
+          body: {
+            id: "123e4567-e89b-12d3-a456-426614174000",
+            messageid: "string",
+            chatid: "string",
+            fromMe: false,
+            isGroup: false,
+            messageType: "text",
+            messageTimestamp: 0,
+            edited: "string",
+            quoted: "string",
+            reaction: "string",
+            sender: "string",
+            senderName: "string",
+            source: "ios",
+            status: "pending",
+            text: "string",
+            vote: "string",
+            buttonOrListid: "string",
+            convertOptions: "string",
+            fileURL: "https://example.com",
+            content: "string",
+            owner: "string",
+            track_source: "string",
+            track_id: "string",
+            created: "2024-01-15T10:30:00Z",
+            updated: "2024-01-15T10:30:00Z",
+            ai_metadata: {
+              agent_id: "string",
+              request: {
+                messages: ["item"],
+                tools: ["item"],
+                options: {
+                  model: "string",
+                  temperature: 0,
+                  maxTokens: 0,
+                  topP: 0,
+                  frequencyPenalty: 0,
+                  presencePenalty: 0
+                }
+              },
+              response: {
+                choices: ["item"],
+                toolResults: ["item"],
+                error: "string"
+              }
+            },
+            response: {
+              status: "success",
+              message: "Media sent successfully",
+              fileUrl: "https://mmg.whatsapp.net/..."
+            }
+          }
+        },
+        {
+          status: 400,
+          label: "Requisição inválida",
+          body: {
+            error: "Invalid media type or file format"
+          }
+        },
+        {
+          status: 401,
+          label: "Não autorizado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 413,
+          label: "Arquivo muito grande",
+          body: {
+            error: "File too large"
+          }
+        },
+        {
+          status: 415,
+          label: "Formato de mídia não suportado",
+          body: {
+            error: "Unsupported media type"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Failed to upload media"
+          }
+        }
+      ]
     },
     'send-menu': {
       title: 'Enviar menu interativo',
@@ -361,11 +449,91 @@ export default function ClientApiTab() {
         ],
         footerText: "Escolha uma das opções abaixo"
       },
-      exampleResponse: {
-        success: true,
-        messageId: "3EB0123456789ABCDEF",
-        timestamp: 1699564800
-      }
+      responses: [
+        {
+          status: 200,
+          label: "Menu enviado com sucesso",
+          body: {
+            id: "123e4567-e89b-12d3-a456-426614174000",
+            messageid: "string",
+            chatid: "string",
+            fromMe: false,
+            isGroup: false,
+            messageType: "text",
+            messageTimestamp: 0,
+            edited: "string",
+            quoted: "string",
+            reaction: "string",
+            sender: "string",
+            senderName: "string",
+            source: "ios",
+            status: "pending",
+            text: "string",
+            vote: "string",
+            buttonOrListid: "string",
+            convertOptions: "string",
+            fileURL: "https://example.com",
+            content: "string",
+            owner: "string",
+            track_source: "string",
+            track_id: "string",
+            created: "2024-01-15T10:30:00Z",
+            updated: "2024-01-15T10:30:00Z",
+            ai_metadata: {
+              agent_id: "string",
+              request: {
+                messages: ["item"],
+                tools: ["item"],
+                options: {
+                  model: "string",
+                  temperature: 0,
+                  maxTokens: 0,
+                  topP: 0,
+                  frequencyPenalty: 0,
+                  presencePenalty: 0
+                }
+              },
+              response: {
+                choices: ["item"],
+                toolResults: ["item"],
+                error: "string"
+              }
+            },
+            response: {
+              status: "success",
+              message: "Menu sent successfully"
+            }
+          }
+        },
+        {
+          status: 400,
+          label: "Requisição inválida",
+          body: {
+            error: "Missing required fields or invalid menu type"
+          }
+        },
+        {
+          status: 401,
+          label: "Não autorizado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 429,
+          label: "Limite de requisições excedido",
+          body: {
+            error: "Rate limit exceeded"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Failed to send menu"
+          }
+        }
+      ]
     },
     'send-carousel': {
       title: 'Enviar carrossel de mídia',
@@ -619,11 +787,39 @@ export default function ClientApiTab() {
         background_color: 7,
         font: 1
       },
-      exampleResponse: {
-        Id: "ABCD1234",
-        status: "Pending",
-        messageTimestamp: 1672531200000
-      }
+      responses: [
+        {
+          status: 200,
+          label: "Status enviado com sucesso",
+          body: {
+            Id: "ABCD1234",
+            content: {},
+            messageTimestamp: 1672531200000,
+            status: "Pending"
+          }
+        },
+        {
+          status: 400,
+          label: "Requisição inválida",
+          body: {
+            error: "Text too long"
+          }
+        },
+        {
+          status: 401,
+          label: "Não autorizado",
+          body: {
+            error: "No session"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Failed to upload media"
+          }
+        }
+      ]
     }
   };
 
