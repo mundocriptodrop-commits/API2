@@ -663,7 +663,7 @@ export default function ClientApiTab() {
     const nextState: Record<string, boolean> = {};
     responseExamples.forEach((_, idx) => {
       const key = `${selectedEndpoint}-${idx}`;
-      nextState[key] = idx === 0;
+      nextState[key] = false;
     });
     setExpandedResponses(nextState);
   }, [selectedEndpoint, responseSignature]);
@@ -882,13 +882,13 @@ export default function ClientApiTab() {
                     const isError = !Number.isNaN(statusNumber)
                       ? statusNumber >= 400
                       : statusString.startsWith('4') || statusString.startsWith('5');
-                    const cardClass = isError
-                      ? 'bg-gradient-to-br from-red-950/80 via-red-900/60 to-slate-900 border-red-600/70'
-                      : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-emerald-600/70';
+                    const cardClass = `bg-slate-900 border ${
+                      isError ? 'border-red-600/60' : 'border-emerald-600/60'
+                    }`;
                     const barClass = isError
-                      ? 'bg-gradient-to-r from-red-500 via-red-600 to-red-700'
+                      ? 'bg-red-500'
                       : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500';
-                    const textClass = isError ? 'text-red-50' : 'text-emerald-50';
+                    const textClass = 'text-slate-100';
                     const badgeClass = isError ? 'text-red-300' : 'text-emerald-300';
                     const copyKey = `response-${statusString}-${idx}`;
                     const responseKey = `${selectedEndpoint}-${idx}`;
@@ -922,18 +922,6 @@ export default function ClientApiTab() {
                             </div>
                           </button>
                           <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() =>
-                                setExpandedResponses((prev) => ({
-                                  ...prev,
-                                  [responseKey]: !isExpanded,
-                                }))
-                              }
-                              className="hidden md:flex items-center space-x-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium text-white"
-                              type="button"
-                            >
-                              <span>{isExpanded ? 'Recolher' : 'Expandir'}</span>
-                            </button>
                             <button
                               onClick={() =>
                                 copyToClipboard(JSON.stringify(response.body, null, 2), copyKey)
