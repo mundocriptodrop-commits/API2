@@ -81,6 +81,8 @@ export default function ClientApiTab() {
   const [font, setFont] = useState(1);
   const [statusFile, setStatusFile] = useState('');
   const [thumbnail, setThumbnail] = useState('');
+
+  const [expandedResponses, setExpandedResponses] = useState<Record<string, boolean>>({});
   
   const [testResponse, setTestResponse] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -509,11 +511,84 @@ export default function ClientApiTab() {
         pixKey: "123e4567-e89b-12d3-a456-426614174000",
         pixName: "Loja Exemplo"
       },
-      exampleResponse: {
-        success: true,
-        messageId: "3EB0123456789ABCDEF",
-        timestamp: 1699564800
-      }
+      responses: [
+        {
+          status: 200,
+          label: "Botão PIX enviado com sucesso",
+          body: {
+            id: "123e4567-e89b-12d3-a456-426614174000",
+            messageid: "string",
+            chatid: "string",
+            fromMe: false,
+            isGroup: false,
+            messageType: "text",
+            messageTimestamp: 0,
+            edited: "string",
+            quoted: "string",
+            reaction: "string",
+            sender: "string",
+            senderName: "string",
+            source: "ios",
+            status: "pending",
+            text: "string",
+            vote: "string",
+            buttonOrListid: "string",
+            convertOptions: "string",
+            fileURL: "https://example.com",
+            content: "string",
+            owner: "string",
+            track_source: "string",
+            track_id: "string",
+            created: "2024-01-15T10:30:00Z",
+            updated: "2024-01-15T10:30:00Z",
+            ai_metadata: {
+              agent_id: "string",
+              request: {
+                messages: ["item"],
+                tools: ["item"],
+                options: {
+                  model: "string",
+                  temperature: 0,
+                  maxTokens: 0,
+                  topP: 0,
+                  frequencyPenalty: 0,
+                  presencePenalty: 0
+                }
+              },
+              response: {
+                choices: ["item"],
+                toolResults: ["item"],
+                error: "string"
+              }
+            },
+            response: {
+              status: "success",
+              message: "PIX button sent successfully"
+            }
+          }
+        },
+        {
+          status: 400,
+          label: "Requisição inválida",
+          body: {
+            error: "Invalid keyType. Allowed: CPF, CNPJ, PHONE, EMAIL, EVP"
+          }
+        },
+        {
+          status: 401,
+          label: "Não autorizado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Failed to send PIX button"
+          }
+        }
+      ]
     },
     'send-status': {
       title: 'Enviar Stories (Status)',
@@ -579,6 +654,19 @@ export default function ClientApiTab() {
         },
       ]
     : [];
+
+  const responseSignature = responseExamples
+    .map((response, idx) => `${idx}-${response.status}-${response.label}`)
+    .join('|');
+
+  useEffect(() => {
+    const nextState: Record<string, boolean> = {};
+    responseExamples.forEach((_, idx) => {
+      const key = `${selectedEndpoint}-${idx}`;
+      nextState[key] = idx === 0;
+    });
+    setExpandedResponses(nextState);
+  }, [selectedEndpoint, responseSignature]);
 
   return (
     <div className="flex h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -803,6 +891,8 @@ export default function ClientApiTab() {
                     const textClass = isError ? 'text-red-50' : 'text-emerald-50';
                     const badgeClass = isError ? 'text-red-300' : 'text-emerald-300';
                     const copyKey = `response-${statusString}-${idx}`;
+                    const responseKey = `${selectedEndpoint}-${idx}`;
+                    const isExpanded = expandedResponses[responseKey] ?? (idx === 0);
 
                     return (
                       <div
@@ -810,37 +900,70 @@ export default function ClientApiTab() {
                         className={`rounded-xl border-2 shadow-xl overflow-hidden relative ${cardClass}`}
                       >
                         <div className={`absolute top-0 left-0 right-0 h-1.5 ${barClass}`}></div>
-                        <div className="flex items-start justify-between px-5 pt-4 pb-2">
-                          <div>
-                            <div className={`text-xs uppercase tracking-wide ${badgeClass}`}>{statusText}</div>
-                            <h4 className="text-white text-sm font-semibold mt-1">{response.label}</h4>
-                          </div>
+                        <div className="flex items-start justify-between px-5 pt-4 pb-2 space-x-3">
                           <button
+                            type="button"
                             onClick={() =>
-                              copyToClipboard(JSON.stringify(response.body, null, 2), copyKey)
+                              setExpandedResponses((prev) => ({
+                                ...prev,
+                                [responseKey]: !isExpanded,
+                              }))
                             }
-                            className="flex items-center space-x-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium text-white"
+                            className="flex items-center text-left space-x-3 group"
                           >
-                            {copiedEndpoint === copyKey ? (
-                              <>
-                                <Check className="w-4 h-4 text-emerald-200" />
-                                <span>Copiado!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-4 h-4 text-emerald-100" />
-                                <span>Copiar</span>
-                              </>
-                            )}
+                            <div className={`flex-shrink-0 rounded-full bg-white/10 p-1 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                              <ChevronRight className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <div className={`text-xs uppercase tracking-wide ${badgeClass}`}>{statusText}</div>
+                              <h4 className="text-white text-sm font-semibold mt-1 group-hover:underline">
+                                {response.label}
+                              </h4>
+                            </div>
                           </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() =>
+                                setExpandedResponses((prev) => ({
+                                  ...prev,
+                                  [responseKey]: !isExpanded,
+                                }))
+                              }
+                              className="hidden md:flex items-center space-x-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium text-white"
+                              type="button"
+                            >
+                              <span>{isExpanded ? 'Recolher' : 'Expandir'}</span>
+                            </button>
+                            <button
+                              onClick={() =>
+                                copyToClipboard(JSON.stringify(response.body, null, 2), copyKey)
+                              }
+                              className="flex items-center space-x-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium text-white"
+                              type="button"
+                            >
+                              {copiedEndpoint === copyKey ? (
+                                <>
+                                  <Check className="w-4 h-4 text-emerald-200" />
+                                  <span>Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-4 h-4 text-emerald-100" />
+                                  <span>Copiar</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
-                        <div className="px-5 pb-5 pt-1">
-                          <pre className={`text-sm md:text-base font-mono leading-relaxed overflow-x-auto ${textClass}`}>
-                            <code className="block">
-                              {JSON.stringify(response.body, null, 2)}
-                            </code>
-                          </pre>
-                        </div>
+                        {isExpanded && (
+                          <div className="px-5 pb-5 pt-1">
+                            <pre className={`text-sm md:text-base font-mono leading-relaxed overflow-x-auto ${textClass}`}>
+                              <code className="block">
+                                {JSON.stringify(response.body, null, 2)}
+                              </code>
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
