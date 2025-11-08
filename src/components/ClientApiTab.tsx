@@ -289,11 +289,91 @@ export default function ClientApiTab() {
         number: "5511999999999",
         text: "Olá! Como posso ajudar?"
       },
-      exampleResponse: {
-        success: true,
-        messageId: "3EB0123456789ABCDEF",
-        timestamp: 1699564800
-      }
+      responses: [
+        {
+          status: 200,
+          label: "Mensagem enviada com sucesso",
+          body: {
+            id: "123e4567-e89b-12d3-a456-426614174000",
+            messageid: "string",
+            chatid: "string",
+            fromMe: false,
+            isGroup: false,
+            messageType: "text",
+            messageTimestamp: 0,
+            edited: "string",
+            quoted: "string",
+            reaction: "string",
+            sender: "string",
+            senderName: "string",
+            source: "ios",
+            status: "pending",
+            text: "string",
+            vote: "string",
+            buttonOrListid: "string",
+            convertOptions: "string",
+            fileURL: "https://example.com",
+            content: "string",
+            owner: "string",
+            track_source: "string",
+            track_id: "string",
+            created: "2024-01-15T10:30:00Z",
+            updated: "2024-01-15T10:30:00Z",
+            ai_metadata: {
+              agent_id: "string",
+              request: {
+                messages: ["item"],
+                tools: ["item"],
+                options: {
+                  model: "string",
+                  temperature: 0,
+                  maxTokens: 0,
+                  topP: 0,
+                  frequencyPenalty: 0,
+                  presencePenalty: 0
+                }
+              },
+              response: {
+                choices: ["item"],
+                toolResults: ["item"],
+                error: "string"
+              }
+            },
+            response: {
+              status: "success",
+              message: "Message sent successfully"
+            }
+          }
+        },
+        {
+          status: 400,
+          label: "Requisição inválida",
+          body: {
+            error: "Missing number or text"
+          }
+        },
+        {
+          status: 401,
+          label: "Não autorizado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 429,
+          label: "Limite de requisições excedido",
+          body: {
+            error: "Rate limit exceeded"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Failed to send message"
+          }
+        }
+      ]
     },
     'send-media': {
       title: 'Enviar mídia (imagem, vídeo, áudio ou documento)',
