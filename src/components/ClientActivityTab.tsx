@@ -174,6 +174,14 @@ function formatLatency(value: number) {
   return `${Math.round(value)} ms`;
 }
 
+function formatPercent(value: number | null | undefined, fractionDigits = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    const decimals = fractionDigits > 0 ? `.${'0'.repeat(fractionDigits)}` : '';
+    return `0${decimals}%`;
+  }
+  return `${Number(value).toFixed(fractionDigits)}%`;
+}
+
 function renderChangeBadge(value: number | null | undefined, positiveIsGood = true) {
   const numericValue = Number.isFinite(value as number) ? Number(value) : 0;
   const isPositive = numericValue >= 0;
@@ -364,12 +372,12 @@ export default function ClientActivityTab() {
             </div>
             <div className="mt-3 flex items-end justify-between">
               <span className="text-3xl font-semibold text-emerald-700">
-                {summary.successRate.toFixed(2)}%
+                {formatPercent(summary.successRate)}
               </span>
               {renderChangeBadge(summary.requestsChange / 2, true)}
             </div>
             <p className="mt-2 text-xs text-emerald-700">
-              Uptime estimado em {summary.uptimePercent.toFixed(2)}% no período.
+              Uptime estimado em {formatPercent(summary.uptimePercent)} no período.
             </p>
           </div>
 
@@ -460,7 +468,7 @@ export default function ClientActivityTab() {
                 <div className="mt-3">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
                     <span>Taxa de sucesso</span>
-                    <span>{endpoint.successRate.toFixed(2)}%</span>
+                    <span>{formatPercent(endpoint.successRate)}</span>
                   </div>
                   <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
                     <div
