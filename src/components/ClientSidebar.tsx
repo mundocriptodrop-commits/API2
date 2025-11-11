@@ -15,43 +15,88 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
   ];
 
   return (
-    <aside className="w-64 bg-gradient-to-b from-slate-50 to-white border-r border-gray-200 min-h-screen flex flex-col">
-      <div className="px-6 pt-8 pb-12">
-        <div className="flex items-center justify-center">
-          <img
-            src="/Logo_login.png"
-            alt="EVA.Send"
-            className="w-[184px] h-auto object-contain"
-          />
+    <aside className="w-64 bg-white/80 backdrop-blur border-r border-slate-200 min-h-screen flex flex-col">
+      <div className="px-6 pt-7 pb-6 border-b border-slate-200">
+        <div className="flex items-center space-x-3">
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+            <img src="/favicon.svg" alt="EVA.Send" className="h-6 w-6 object-contain" />
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold">EVA.Send</p>
+            <p className="text-sm font-semibold text-slate-800">Painel do cliente</p>
+          </div>
         </div>
       </div>
 
-      <nav className="flex-1 px-4 space-y-2 mt-4">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+      <nav className="flex-1 px-4 py-6 space-y-3">
+        <p className="text-[11px] uppercase tracking-[0.35em] text-slate-400 font-semibold px-2">
+          Navegação
+        </p>
+        <div className="space-y-1.5">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
 
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${
-                isActive
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30 font-semibold scale-105'
-                  : 'text-gray-700 hover:bg-white hover:shadow-md font-medium'
-              }`}
-            >
-              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : ''}`} />
-              <span className="text-sm">{tab.label}</span>
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onTabChange(tab.id)}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all duration-200 border ${
+                  isActive
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-transparent shadow-lg shadow-blue-500/25'
+                    : 'bg-white/90 hover:bg-blue-50/70 text-slate-600 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
+                      isActive ? 'bg-white/15' : 'bg-slate-100'
+                    }`}
+                  >
+                    <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-white stroke-[2.5]' : 'text-slate-500'}`} />
+                  </div>
+                  <div className="text-left">
+                    <span className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-slate-700'}`}>
+                      {tab.label}
+                    </span>
+                    <div className={`flex items-center space-x-2 mt-0.5 ${isActive ? 'text-white/70' : 'text-slate-400'}`}>
+                      <span className="inline-block w-1 h-1 rounded-full bg-current" />
+                      <span className="text-[11px] uppercase tracking-[0.3em]">
+                        {tab.id === 'dashboard' && 'Visão'}
+                        {tab.id === 'instances' && 'Gestão'}
+                        {tab.id === 'activity' && 'Monitor'}
+                        {tab.id === 'api' && 'Docs'}
+                        {tab.id === 'settings' && 'Conta'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {isActive && (
+                  <span className="px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] bg-white/20 rounded-full text-white shadow-sm">
+                    ativo
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="p-4 border-t border-gray-200">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4">
-          <p className="text-xs font-semibold text-blue-900 mb-1">Suporte</p>
-          <p className="text-xs text-blue-700">Precisa de ajuda? Entre em contato conosco.</p>
+      <div className="px-4 pb-6 pt-4 border-t border-slate-200">
+        <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-200/40 p-4">
+          <p className="text-xs font-semibold text-slate-700 mb-1 flex items-center space-x-2">
+            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 shadow-sm shadow-blue-500/40" />
+            <span>Precisa de suporte?</span>
+          </p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Nossa equipe está disponível para ajudar você a configurar integrações, revisar mensagens interativas ou tirar dúvidas sobre a plataforma.
+          </p>
+          <a
+            href="mailto:suporte@evasend.com.br"
+            className="mt-3 inline-flex items-center justify-center w-full text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 rounded-lg shadow shadow-blue-500/20 hover:shadow-md hover:shadow-blue-500/25 transition-all duration-200"
+          >
+            Falar com o suporte
+          </a>
         </div>
       </div>
     </aside>
