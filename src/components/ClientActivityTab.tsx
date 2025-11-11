@@ -197,6 +197,54 @@ function renderChangeBadge(value: number | null | undefined, positiveIsGood = tr
   );
 }
 
+const normalizeNumber = (value: unknown, fallback = 0) => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  const numericValue = typeof value === 'string' ? parseFloat(value) : Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
+const mapSummaryFromRpc = (raw: any): ApiSummary => {
+  if (!raw) {
+    return {
+      totalRequests: 0,
+      requestsChange: 0,
+      successRate: 0,
+      totalFailures: 0,
+      failureChange: 0,
+      averageLatencyMs: 0,
+      peakLatencyMs: 0,
+      throughputPerMinute: 0,
+      uptimePercent: 0,
+    };
+  }
+
+  return {
+    totalRequests: normalizeNumber(raw.total_requests ?? raw.totalRequests),
+    requestsChange: normalizeNumber(raw.requests_change ?? raw.requestsChange),
+    successRate: normalizeNumber(raw.success_rate ?? raw.successRate),
+    totalFailures: normalizeNumber(raw.total_failures ?? raw.totalFailures),
+    failureChange: normalizeNumber(raw.failure_change ?? raw.failureChange),
+    averageLatencyMs: normalizeNumber(raw.average_latency_ms ?? raw.averageLatencyMs),
+    peakLatencyMs: normalizeNumber(raw.peak_latency_ms ?? raw.peakLatencyMs),
+    throughputPerMinute: normalizeNumber(raw.throughput_per_minute ?? raw.throughputPerMinute),
+    uptimePercent: normalizeNumber(raw.uptime_percent ?? raw.uptimePercent),
+  };
+};
+
+const mapEndpointStatFromRpc = (raw: any): EndpointStat => {
+  return {
+    endpoint: raw.endpoint,
+    method: raw.method,
+    totalRequests: normalizeNumber(raw.total_requests ?? raw.totalRequests),
+    successRate: normalizeNumber(raw.success_rate ?? raw.successRate),
+    averageLatencyMs: normalizeNumber(raw.average_latency_ms ?? raw.averageLatencyMs),
+    totalFailures: normalizeNumber(raw.total_failures ?? raw.totalFailures),
+    status: raw.status ?? 'operational',
+  };
+};
+
 export default function ClientActivityTab() {
   const { user } = useAuth();
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
@@ -232,19 +280,15 @@ export default function ClientActivityTab() {
         throw new Error('API monitoring RPCs indisponíveis');
       }
 
-      setSummary(
-        summaryData && Array.isArray(summaryData)
-          ? (summaryData[0] as ApiSummary)
-          : (summaryData as ApiSummary) ?? fallback.summary
-      );
-      setEndpointStats(
-        Array.isArray(endpointsData) && endpointsData.length > 0
-          ? (endpointsData as EndpointStat[])
-          : fallback.endpoints
-      );
-      setFailureLogs(
-        Array.isArray(failuresData) && failuresData.length > 0 ? (failuresData as FailureLog[]) : fallback.failures
-      );
+      const summaryRecord = Array.isArray(summaryData) ? summaryData[0] : summaryData;
+      setSummary(mapSummaryFromRpc(summaryRecord));
+
+      const endpointsRecords = Array.isArray(endpointsData) ? endpointsData : endpointsData ? [endpointsData] : [];
+      setEndpointStats(endpointsRecords.map(mapEndpointStatFromRpc));
+
+      const failuresRecords = Array.isArray(failuresData) ? failuresData : failuresData ? [failuresData] : [];
+      setFailureLogs(failuresRecords as FailureLog[]);
+
     } catch (error) {
       console.warn('Monitoramento da API usando dados simulados:', error);
       const fallback = createMockMonitoring(timeframe);
