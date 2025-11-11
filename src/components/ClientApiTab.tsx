@@ -142,6 +142,9 @@ export default function ClientApiTab() {
     }
   };
 
+  const escapeForShellSingleQuotes = (value: string) =>
+    value.replace(/'/g, `'\"'\"'`);
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedEndpoint(id);
@@ -984,6 +987,8 @@ export default function ClientApiTab() {
     .join('|');
 
   const requestPayload = buildRequestPayload();
+  const tokenHeaderValue = testToken || 'seu_token_de_instancia';
+  const sanitizedTokenHeaderValue = escapeForShellSingleQuotes(tokenHeaderValue);
 
   useEffect(() => {
     const nextState: Record<string, boolean> = {};
@@ -1836,7 +1841,7 @@ export default function ClientApiTab() {
 
                   <div className="bg-slate-900 rounded-xl p-5 border border-slate-700 relative shadow-lg">
                     <button
-                      onClick={() => copyToClipboard(`curl --request POST \\\n  --url ${buildEndpointUrl(currentEndpoint.path)} \\\n  --header 'Content-Type: application/json' \\\n  --header 'Authorization: Bearer ${SUPABASE_ANON_KEY?.substring(0, 30)}...' \\\n  --header 'token: seu_token_de_instancia' \\\n  --data '${JSON.stringify(requestPayload, null, 2)}'`, 'curl-code')}
+                      onClick={() => copyToClipboard(`curl --request POST \\\n  --url ${buildEndpointUrl(currentEndpoint.path)} \\\n  --header 'Content-Type: application/json' \\\n  --header 'Authorization: Bearer ${SUPABASE_ANON_KEY?.substring(0, 30)}...' \\\n  --header 'token: ${sanitizedTokenHeaderValue}' \\\n  --data '${JSON.stringify(requestPayload, null, 2)}'`, 'curl-code')}
                       className="absolute top-3 right-3 p-2 hover:bg-slate-800 rounded-lg transition-colors"
                     >
                       {copiedEndpoint === 'curl-code' ? (
@@ -1850,17 +1855,9 @@ export default function ClientApiTab() {
   --url ${buildEndpointUrl(currentEndpoint.path)} \\
   --header 'Content-Type: application/json' \\
   --header 'Authorization: Bearer SUA_CHAVE_ANON' \\
-  --header 'token: seu_token_de_instancia' \\
+  --header 'token: ${tokenHeaderValue}' \\
   --data '${JSON.stringify(requestPayload, null, 2)}'`}
                     </pre>
-                    <div className="mt-3 bg-slate-800/50 rounded-lg p-3 border border-slate-700">
-                      <p className="text-xs text-slate-300 mb-1">
-                        <strong className="text-slate-100">Nota:</strong> O header <code className="bg-slate-700 px-1 py-0.5 rounded text-slate-200">Authorization</code> é necessário apenas quando usar a Edge Function diretamente.
-                      </p>
-                      <p className="text-xs text-slate-300">
-                        Para o Cloudflare Worker, apenas o header <code className="bg-slate-700 px-1 py-0.5 rounded text-slate-200">token</code> é necessário.
-                      </p>
-                    </div>
               </div>
             </div>
           )}
