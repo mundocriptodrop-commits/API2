@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Check, ChevronRight, Send, Image, Smartphone, Shield, Zap } from 'lucide-react';
+import { Copy, Check, ChevronRight, ArrowRight, Send, Image, Smartphone, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -992,14 +992,15 @@ export default function ClientApiTab() {
   return (
     <div className="flex h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto shadow-lg">
-        <div className="p-4 border-b border-slate-200 bg-gradient-to-br from-blue-500 to-indigo-600">
-          <h3 className="text-xs font-semibold text-blue-100 mb-1 tracking-wider uppercase">Endpoints</h3>
-          <div className="text-2xl font-bold text-white">6</div>
-          <p className="text-xs text-blue-100 mt-0.5">Recursos disponíveis</p>
-          </div>
+      <div className="w-80 bg-white/95 backdrop-blur border-r border-slate-200 overflow-y-auto shadow-lg">
+        <div className="sticky top-0 z-10 bg-white/95 border-b border-slate-200 px-5 py-4">
+          <h2 className="text-sm font-semibold text-slate-800 tracking-wide uppercase">Documentação</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Explore os endpoints disponíveis e veja detalhes de requisição.
+          </p>
+        </div>
 
-        <div className="p-3">
+        <div className="p-4 space-y-4">
           {endpoints.map((group) => {
             const isExpanded = expandedGroups.includes(group.id);
             const toggleGroup = () => {
@@ -1011,40 +1012,61 @@ export default function ClientApiTab() {
             };
 
             return (
-              <div key={group.id} className="mb-2">
+              <div key={group.id} className="space-y-2">
                 <button
                   onClick={toggleGroup}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 rounded-xl transition-all duration-200 font-medium"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white hover:shadow transition-all duration-200 font-semibold"
                 >
                   <div className="flex items-center space-x-3">
-                    <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                    <span>{group.label}</span>
+                    <div className={`w-7 h-7 flex items-center justify-center rounded-full bg-slate-200 text-slate-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                      <ChevronRight className="w-4 h-4" />
                     </div>
-                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{group.count}</span>
+                    <span>{group.label}</span>
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 bg-white px-2.5 py-1 rounded-full border border-slate-200">{group.count}</span>
                 </button>
 
                 {isExpanded && group.children.length > 0 && (
-                  <div className="ml-4 mt-2 space-y-1">
-                    {group.children.map((child) => (
-                      <button
-                        key={child.id}
-                        onClick={() => setSelectedEndpoint(child.id)}
-                        className={`w-full flex items-center justify-between px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
-                          selectedEndpoint === child.id
-                            ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
-                            : 'text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="text-left text-xs font-medium">{child.label}</span>
-                        <span className={`text-xs px-2.5 py-1 rounded-md font-bold ${
-                          child.id === 'send-text'
-                            ? selectedEndpoint === child.id ? 'bg-white/20 text-white' : 'bg-cyan-500 text-white'
-                            : selectedEndpoint === child.id ? 'bg-white/20 text-white' : 'bg-green-500 text-white'
-                        }`}>
-                          {child.method}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="ml-2 mt-1 space-y-1.5">
+                    {group.children.map((child) => {
+                      const childData = endpointData[child.id];
+                      const isSelected = selectedEndpoint === child.id;
+
+                      return (
+                        <button
+                          key={child.id}
+                          onClick={() => setSelectedEndpoint(child.id)}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all duration-200 ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-lg shadow-blue-500/25'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                          }`}
+                        >
+                          <div>
+                            <span className={`block text-sm font-semibold ${isSelected ? 'text-white' : 'text-slate-700'}`}>
+                              {child.label}
+                            </span>
+                            <span className={`block text-xs font-mono mt-1 ${isSelected ? 'text-white/70' : 'text-slate-400'}`}>
+                              {childData.path}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={`text-xs font-bold px-2.5 py-1 rounded-md ${
+                                isSelected ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {child.method}
+                            </span>
+                            <ArrowRight
+                              className={`w-4 h-4 ${
+                                isSelected ? 'text-white' : 'text-blue-500'
+                              }`}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1120,33 +1142,6 @@ export default function ClientApiTab() {
           </div>
         </div>
       )}
-
-            {/* Rate Limiting */}
-            <div className="bg-white rounded-2xl border border-orange-200 overflow-hidden shadow-lg">
-              <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-3 border-b border-orange-400">
-                <h3 className="font-bold text-white flex items-center text-sm">
-                  <Shield className="w-4 h-4 mr-2" />
-                  Rate Limiting
-                </h3>
-              </div>
-              <div className="p-5">
-                <p className="text-xs text-slate-600 mb-3">
-                  Proteção contra abuso com limites de requisições:
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-3 text-center border border-orange-200">
-                    <div className="text-xs text-slate-600 mb-1 font-medium">Limite por IP</div>
-                    <div className="text-2xl font-bold text-orange-600">1.000</div>
-                    <div className="text-xs text-slate-500">req/min</div>
-              </div>
-                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-3 text-center border border-orange-200">
-                    <div className="text-xs text-slate-600 mb-1 font-medium">Limite por Token</div>
-                    <div className="text-2xl font-bold text-orange-600">1.000</div>
-                    <div className="text-xs text-slate-500">req/min</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
             {/* Features */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-lg">
