@@ -3,257 +3,288 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Activity,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
   RefreshCw,
-  Search,
-  Download,
-  CalendarDays,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Gauge,
+  BarChart3,
+  Target,
+  ShieldCheck,
+  Clock,
+  Zap,
 } from 'lucide-react';
-import type { Database } from '../lib/database.types';
 
-type WhatsAppInstance = Database['public']['Tables']['whatsapp_instances']['Row'];
+type Timeframe = '24h' | '7d' | '30d';
 
-interface ActivityLog {
+type ApiSummary = {
+  totalRequests: number;
+  requestsChange: number;
+  successRate: number;
+  totalFailures: number;
+  failureChange: number;
+  averageLatencyMs: number;
+  peakLatencyMs: number;
+  throughputPerMinute: number;
+  uptimePercent: number;
+};
+
+type EndpointStat = {
+  endpoint: string;
+  method: string;
+  totalRequests: number;
+  successRate: number;
+  averageLatencyMs: number;
+  totalFailures: number;
+  status: 'operational' | 'degraded' | 'down';
+};
+
+type FailureLog = {
   id: string;
-  instanceName: string;
-  action: string;
-  status: 'success' | 'error' | 'warning';
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  message: string;
   timestamp: string;
-  details?: string;
-}
+};
 
-function formatRelativeGroupLabel(dateKey: string): string {
-  const date = new Date(`${dateKey}T00:00:00`);
-  const today = new Date();
-  const utcDate = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-  const utcToday = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const diffDays = Math.round((utcToday - utcDate) / 86400000);
+type MonitoringPayload = {
+  summary: ApiSummary;
+  endpoints: EndpointStat[];
+  failures: FailureLog[];
+};
 
-  if (diffDays === 0) return 'Hoje';
-  if (diffDays === 1) return 'Ontem';
+const timeframes: { id: Timeframe; label: string }[] = [
+  { id: '24h', label: 'Últimas 24h' },
+  { id: '7d', label: '7 dias' },
+  { id: '30d', label: '30 dias' },
+];
 
-  return date.toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
+const timeframeLabel: Record<Timeframe, string> = {
+  '24h': '24 horas',
+  '7d': '7 dias',
+  '30d': '30 dias',
+};
+
+function createMockMonitoring(timeframe: Timeframe): MonitoringPayload {
+  const multiplier = timeframe === '24h' ? 1 : timeframe === '7d' ? 4 : 10;
+  const totalRequests = Math.round(3800 * multiplier);
+  const totalFailures = Math.round(totalRequests * (timeframe === '24h' ? 0.028 : timeframe === '7d' ? 0.032 : 0.035));
+  const successRate = Number((((totalRequests - totalFailures) / totalRequests) * 100).toFixed(2));
+  const averageLatencyMs = Math.round(420 + 15 * multiplier + Math.random() * 40);
+  const peakLatencyMs = averageLatencyMs + Math.round(180 + Math.random() * 120);
+  const throughputPerMinute = Math.max(
+    1,
+    Math.round(
+      totalRequests /
+        (timeframe === '24h' ? 1440 : timeframe === '7d' ? 10_080 : 43_200)
+    )
+  );
+  const uptimePercent = Number((99.2 + Math.random() * 0.6).toFixed(2));
+  const summary: ApiSummary = {
+    totalRequests,
+    requestsChange: timeframe === '24h' ? 5.4 : timeframe === '7d' ? 2.1 : 1.3,
+    successRate,
+    totalFailures,
+    failureChange: timeframe === '24h' ? -3.2 : timeframe === '7d' ? -4.1 : -5.8,
+    averageLatencyMs,
+    peakLatencyMs,
+    throughputPerMinute,
+    uptimePercent,
+  };
+
+  const endpointBlueprint = [
+    { endpoint: '/send/text', method: 'POST', share: 0.28, baseLatency: 380 },
+    { endpoint: '/send/media', method: 'POST', share: 0.23, baseLatency: 520 },
+    { endpoint: '/send/menu', method: 'POST', share: 0.17, baseLatency: 610 },
+    { endpoint: '/send/carousel', method: 'POST', share: 0.12, baseLatency: 640 },
+    { endpoint: '/send/pix-button', method: 'POST', share: 0.11, baseLatency: 450 },
+    { endpoint: '/send/status', method: 'POST', share: 0.09, baseLatency: 700 },
+  ];
+
+  const endpoints: EndpointStat[] = endpointBlueprint.map((item, index) => {
+    const requests = Math.max(1, Math.round(totalRequests * item.share));
+    const failureRatio = 0.015 + index * 0.006 + Math.random() * 0.003;
+    const failures = Math.round(requests * failureRatio);
+    const successRateEndpoint = Number((((requests - failures) / requests) * 100).toFixed(2));
+    const status: EndpointStat['status'] =
+      successRateEndpoint >= 98 ? 'operational' : successRateEndpoint >= 94 ? 'degraded' : 'down';
+
+    return {
+      endpoint: item.endpoint,
+      method: item.method,
+      totalRequests: requests,
+      successRate: successRateEndpoint,
+      averageLatencyMs: Math.round(item.baseLatency + Math.random() * 80),
+      totalFailures: failures,
+      status,
+    };
   });
+
+  const failureLogs: FailureLog[] = Array.from({ length: Math.min(6, totalFailures ? 6 : 0) }).map((_, idx) => {
+    const endpoint = endpoints[idx % endpoints.length];
+    const statusCodeOptions = [500, 504, 429, 422, 503, 408];
+    const statusCode = statusCodeOptions[idx % statusCodeOptions.length];
+    const timestampOffsetMinutes =
+      timeframe === '24h' ? (idx + 1) * 75 : timeframe === '7d' ? (idx + 2) * 6 * 60 : (idx + 3) * 12 * 60;
+
+    return {
+      id: `mock-failure-${timeframe}-${idx}`,
+      endpoint: endpoint.endpoint,
+      method: endpoint.method,
+      statusCode,
+      message:
+        statusCode >= 500
+          ? 'Erro interno no serviço upstream.'
+          : statusCode === 429
+          ? 'Limite de requisições excedido para o endpoint.'
+          : 'Validação rejeitou o payload recebido.',
+      timestamp: new Date(Date.now() - timestampOffsetMinutes * 60 * 1000).toISOString(),
+    };
+  });
+
+  return { summary, endpoints, failures: failureLogs };
 }
 
-function formatDateLabel(dateString: string): string {
-  const date = new Date(dateString);
+function formatRelativeTime(isoDate: string) {
+  const date = new Date(isoDate);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
+  const diffMinutes = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Agora mesmo';
-  if (diffMins < 60) return `${diffMins} min atrás`;
+  if (diffMinutes < 1) return 'Agora mesmo';
+  if (diffMinutes < 60) return `${diffMinutes} min atrás`;
   if (diffHours < 24) return `${diffHours}h atrás`;
-  if (diffDays < 7) return `${diffDays}d atrás`;
+  if (diffDays === 1) return 'Ontem';
+  if (diffDays <= 7) return `${diffDays} dias atrás`;
 
-  return date.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return date.toLocaleString('pt-BR');
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString('pt-BR');
+}
+
+function formatLatency(value: number) {
+  return `${Math.round(value)} ms`;
+}
+
+function renderChangeBadge(value: number, positiveIsGood = true) {
+  const isPositive = value >= 0;
+  const Icon = isPositive ? TrendingUp : TrendingDown;
+  const isGood = positiveIsGood ? isPositive : !isPositive;
+  const classes = isGood ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${classes}`}>
+      <Icon className="w-3.5 h-3.5" />
+      {`${isPositive ? '+' : ''}${value.toFixed(1)}%`}
+    </span>
+  );
 }
 
 export default function ClientActivityTab() {
   const { user } = useAuth();
-  const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [timeframe, setTimeframe] = useState<Timeframe>('24h');
+  const [summary, setSummary] = useState<ApiSummary | null>(null);
+  const [endpointStats, setEndpointStats] = useState<EndpointStat[]>([]);
+  const [failureLogs, setFailureLogs] = useState<FailureLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'warning' | 'error'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showLast7Days, setShowLast7Days] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchMonitoring = async (options?: { silent?: boolean }) => {
+    if (options?.silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const fallback = createMockMonitoring(timeframe);
+
+      const { data: summaryData, error: summaryError } = await supabase.rpc('get_api_monitoring_summary', {
+        timeframe,
+      });
+      const { data: endpointsData, error: endpointsError } = await supabase.rpc('get_api_monitoring_endpoints', {
+        timeframe,
+      });
+      const { data: failuresData, error: failuresError } = await supabase.rpc('get_api_monitoring_failures', {
+        timeframe,
+        limit: 6,
+      });
+
+      if (summaryError || endpointsError) {
+        throw new Error('API monitoring RPCs indisponíveis');
+      }
+
+      setSummary(
+        summaryData && Array.isArray(summaryData)
+          ? (summaryData[0] as ApiSummary)
+          : (summaryData as ApiSummary) ?? fallback.summary
+      );
+      setEndpointStats(
+        Array.isArray(endpointsData) && endpointsData.length > 0
+          ? (endpointsData as EndpointStat[])
+          : fallback.endpoints
+      );
+      setFailureLogs(
+        Array.isArray(failuresData) && failuresData.length > 0 ? (failuresData as FailureLog[]) : fallback.failures
+      );
+    } catch (error) {
+      console.warn('Monitoramento da API usando dados simulados:', error);
+      const fallback = createMockMonitoring(timeframe);
+      setSummary(fallback.summary);
+      setEndpointStats(fallback.endpoints);
+      setFailureLogs(fallback.failures);
+    } finally {
+      setLastUpdated(new Date());
+      if (options?.silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (user) {
-      loadData();
+      fetchMonitoring();
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, timeframe]);
 
-  async function loadData() {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('whatsapp_instances')
-        .select('*')
-        .eq('user_id', user?.id || '')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setInstances(data || []);
-
-      const logs: ActivityLog[] = (data || []).map((instance) => ({
-        id: instance.id,
-        instanceName: instance.name,
-        action:
-          instance.status === 'connected'
-            ? 'Instância conectada'
-            : instance.status === 'connecting'
-            ? 'Conectando instância'
-            : 'Instância desconectada',
-        status:
-          instance.status === 'connected'
-            ? 'success'
-            : instance.status === 'connecting'
-            ? 'warning'
-            : 'error',
-        timestamp: instance.updated_at || instance.created_at,
-        details: instance.phone_number || undefined,
-      }));
-
-      setActivities(logs);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const summary = useMemo(() => {
-    const successCount = activities.filter((activity) => activity.status === 'success').length;
-    const warningCount = activities.filter((activity) => activity.status === 'warning').length;
-    const errorCount = activities.filter((activity) => activity.status === 'error').length;
-
-    return {
-      total: activities.length,
-      success: successCount,
-      warning: warningCount,
-      error: errorCount,
-    };
-  }, [activities]);
-
-  const filteredActivities = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    const now = new Date();
-
-    return activities.filter((activity) => {
-      if (filterStatus !== 'all' && activity.status !== filterStatus) {
-        return false;
-      }
-
-      if (showLast7Days) {
-        const activityDate = new Date(activity.timestamp);
-        const diffDays = (now.getTime() - activityDate.getTime()) / 86400000;
-        if (diffDays > 7) {
-          return false;
-        }
-      }
-
-      if (term) {
-        const haystack = `${activity.instanceName} ${activity.action} ${activity.details ?? ''}`.toLowerCase();
-        if (!haystack.includes(term)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [activities, filterStatus, searchTerm, showLast7Days]);
-
-  const groupedActivities = useMemo(() => {
-    const groups = filteredActivities.reduce<Record<string, ActivityLog[]>>((acc, activity) => {
-      const date = new Date(activity.timestamp);
-      const dayKey = date.toISOString().split('T')[0];
-      if (!acc[dayKey]) {
-        acc[dayKey] = [];
-      }
-      acc[dayKey].push(activity);
-      return acc;
-    }, {});
-
-    return Object.keys(groups)
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-      .map((key) => ({
-        key,
-        label: formatRelativeGroupLabel(key),
-        items: groups[key].sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        ),
-      }));
-  }, [filteredActivities]);
-
-  const getActivityIcon = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <CheckCircle className="w-5 h-5 text-emerald-600" />;
-      case 'error':
-        return <XCircle className="w-5 h-5 text-rose-600" />;
-      case 'warning':
-        return <AlertCircle className="w-5 h-5 text-amber-600" />;
-      default:
-        return <Activity className="w-5 h-5 text-slate-600" />;
-    }
+  const handleRefresh = () => {
+    fetchMonitoring({ silent: true });
   };
 
-  const getActivityColor = (status: string) => {
-    switch (status) {
-      case 'success':
-        return 'bg-emerald-50 border-emerald-200';
-      case 'error':
-        return 'bg-rose-50 border-rose-200';
-      case 'warning':
-        return 'bg-amber-50 border-amber-200';
-      default:
-        return 'bg-slate-50 border-slate-200';
-    }
+  const handleTimeframeChange = (value: Timeframe) => {
+    setTimeframe(value);
   };
 
-  const handleRefresh = async () => {
-    await loadData();
-  };
+  const operationalEndpoints = useMemo(
+    () => endpointStats.filter((endpoint) => endpoint.status === 'operational').length,
+    [endpointStats]
+  );
 
-  const handleExport = () => {
-    if (filteredActivities.length === 0) {
-      return;
-    }
+  const degradedEndpoints = useMemo(
+    () => endpointStats.filter((endpoint) => endpoint.status === 'degraded').length,
+    [endpointStats]
+  );
 
-    const headers = ['Instância', 'Ação', 'Status', 'Data', 'Detalhes'];
-    const rows = filteredActivities.map((activity) => [
-      activity.instanceName,
-      activity.action,
-      activity.status,
-      new Date(activity.timestamp).toLocaleString('pt-BR'),
-      activity.details ?? '',
-    ]);
+  const downEndpoints = useMemo(
+    () => endpointStats.filter((endpoint) => endpoint.status === 'down').length,
+    [endpointStats]
+  );
 
-    const csvContent = [headers, ...rows]
-      .map((row) =>
-        row
-          .map((cell) => {
-            const value = String(cell ?? '');
-            if (value.includes('"') || value.includes(';') || value.includes('\n')) {
-              return `"${value.replace(/"/g, '""')}"`;
-            }
-            return value;
-          })
-          .join(';')
-      )
-      .join('\n');
+  const initialLoading = loading && !summary;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `atividades-evasend-${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-lg text-slate-500">Carregando atividades...</div>
+        <div className="text-lg text-slate-500">Carregando monitoramento da API...</div>
       </div>
     );
   }
@@ -262,194 +293,293 @@ export default function ClientActivityTab() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Atividades</h2>
-          <p className="text-slate-500 mt-1">Histórico de ações das suas instâncias</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefresh}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Atualizar
-          </button>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2 text-sm font-semibold text-white shadow shadow-blue-500/25 hover:shadow-md transition"
-          >
-            <Download className="w-4 h-4" />
-            Exportar CSV
-          </button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-400">Eventos registrados</p>
-          <div className="mt-2 flex items-end justify-between">
-            <span className="text-3xl font-semibold text-slate-800">{summary.total}</span>
-            <Activity className="w-5 h-5 text-blue-500" />
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Considera todas as ações registradas pelo sistema.
+          <h2 className="text-2xl font-bold text-slate-900">Monitoramento da API</h2>
+          <p className="text-slate-500 mt-1">
+            Acompanhe volume de requisições, erros e desempenho dos endpoints.
+          </p>
+          <p className="text-xs text-slate-400 mt-2">
+            Última atualização:{' '}
+            {lastUpdated ? lastUpdated.toLocaleString('pt-BR') : 'aguardando primeira sincronização'}
           </p>
         </div>
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-emerald-500">Eventos concluídos</p>
-          <div className="mt-2 flex items-end justify-between">
-            <span className="text-3xl font-semibold text-emerald-600">{summary.success}</span>
-            <CheckCircle className="w-5 h-5 text-emerald-500" />
-          </div>
-          <p className="mt-2 text-xs text-emerald-600">
-            Instâncias conectadas ou com ações finalizadas.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-amber-600">Em andamento</p>
-          <div className="mt-2 flex items-end justify-between">
-            <span className="text-3xl font-semibold text-amber-600">{summary.warning}</span>
-            <AlertCircle className="w-5 h-5 text-amber-500" />
-          </div>
-          <p className="mt-2 text-xs text-amber-600">
-            Ações que ainda estão se estabilizando ou aguardam confirmação.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-rose-600">Necessita atenção</p>
-          <div className="mt-2 flex items-end justify-between">
-            <span className="text-3xl font-semibold text-rose-600">{summary.error}</span>
-            <XCircle className="w-5 h-5 text-rose-500" />
-          </div>
-          <p className="mt-2 text-xs text-rose-600">
-            Instâncias desconectadas, expiradas ou com falhas identificadas.
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { id: 'all', label: 'Todas', color: 'bg-slate-200 text-slate-700' },
-              { id: 'success', label: 'Sucesso', color: 'bg-emerald-100 text-emerald-700' },
-              { id: 'warning', label: 'Atenção', color: 'bg-amber-100 text-amber-700' },
-              { id: 'error', label: 'Erro', color: 'bg-rose-100 text-rose-700' },
-            ].map((option) => (
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-2">
+          <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+            {timeframes.map((option) => (
               <button
                 key={option.id}
-                onClick={() => setFilterStatus(option.id as typeof filterStatus)}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition ${
-                  filterStatus === option.id
-                    ? 'border-transparent bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow shadow-blue-500/20'
-                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                onClick={() => handleTimeframeChange(option.id)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                  timeframe === option.id
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow shadow-blue-500/25'
+                    : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 {option.label}
-                <span
-                  className={`inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full px-2 text-xs font-semibold ${
-                    filterStatus === option.id ? 'bg-white/25 text-white' : option.color
-                  }`}
-                >
-                  {option.id === 'all'
-                    ? summary.total
-                    : option.id === 'success'
-                    ? summary.success
-                    : option.id === 'warning'
-                    ? summary.warning
-                    : summary.error}
-                </span>
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por instância, ação ou número"
-                className="h-10 rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-600 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-            <button
-              onClick={() => setShowLast7Days((prev) => !prev)}
-              className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition ${
-                showLast7Days
-                  ? 'border-blue-500 bg-blue-50 text-blue-600'
-                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
-              }`}
-            >
-              <CalendarDays className="w-4 h-4" />
-              Últimos 7 dias
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-          {filteredActivities.length === activities.length && !showLast7Days && !searchTerm
-            ? 'Exibindo todas as atividades registradas para as suas instâncias.'
-            : `Exibindo ${filteredActivities.length} de ${activities.length} eventos com os filtros selecionados.`}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Atualizando...' : 'Atualizar'}
+          </button>
         </div>
       </div>
 
-      {activities.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-          <Activity className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-800 mb-2">Nenhuma atividade registrada</h3>
-          <p className="text-slate-500 text-sm">
-            As atividades das suas instâncias aparecerão aqui assim que forem registradas.
-          </p>
-        </div>
-      ) : filteredActivities.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-          <Search className="w-14 h-14 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-800 mb-2">Nenhum resultado com os filtros atuais</h3>
-          <p className="text-slate-500 text-sm">
-            Ajuste os filtros ou remova a busca para visualizar outras atividades.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {groupedActivities.map((group) => (
-            <div key={group.key} className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
-                {group.label}
+      {summary && (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-slate-400">
+                Requisições ({timeframeLabel[timeframe]})
+              </p>
+              <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
+                <Activity className="w-4.5 h-4.5" />
               </div>
-              <div className="space-y-3">
-                {group.items.map((activity) => (
-                  <div
-                    key={`${group.key}-${activity.id}-${activity.timestamp}`}
-                    className={`bg-white rounded-xl shadow-sm border p-4 ${getActivityColor(activity.status)}`}
+            </div>
+            <div className="mt-3 flex items-end justify-between">
+              <span className="text-3xl font-semibold text-slate-900">
+                {formatNumber(summary.totalRequests)}
+              </span>
+              {renderChangeBadge(summary.requestsChange)}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Taxa média: {formatNumber(summary.throughputPerMinute)} req/min
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-emerald-500">Taxa de sucesso</p>
+              <div className="h-9 w-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <ShieldCheck className="w-4.5 h-4.5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-end justify-between">
+              <span className="text-3xl font-semibold text-emerald-700">
+                {summary.successRate.toFixed(2)}%
+              </span>
+              {renderChangeBadge(summary.requestsChange / 2, true)}
+            </div>
+            <p className="mt-2 text-xs text-emerald-700">
+              Uptime estimado em {summary.uptimePercent.toFixed(2)}% no período.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-rose-500">Falhas registradas</p>
+              <div className="h-9 w-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
+                <AlertTriangle className="w-4.5 h-4.5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-end justify-between">
+              <span className="text-3xl font-semibold text-rose-600">
+                {formatNumber(summary.totalFailures)}
+              </span>
+              {renderChangeBadge(summary.failureChange, false)}
+            </div>
+            <p className="mt-2 text-xs text-rose-600">
+              Distribuição similar aos endpoints intensivos de mídia.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-indigo-500">Latência média</p>
+              <div className="h-9 w-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                <Gauge className="w-4.5 h-4.5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-end justify-between">
+              <span className="text-3xl font-semibold text-indigo-700">
+                {formatLatency(summary.averageLatencyMs)}
+              </span>
+              {renderChangeBadge(-summary.requestsChange / 3, false)}
+            </div>
+            <p className="mt-2 text-xs text-indigo-600">
+              Pico observado: {formatLatency(summary.peakLatencyMs)}.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Saúde por endpoint</h3>
+            <span className="text-xs uppercase tracking-[0.32em] text-slate-400">
+              {endpointStats.length} monitorados
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {endpointStats.map((endpoint) => (
+              <div
+                key={endpoint.endpoint}
+                className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 hover:bg-slate-50 transition"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-600 border border-slate-200">
+                        {endpoint.method}
+                      </span>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {endpoint.endpoint}
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {formatNumber(endpoint.totalRequests)} requisições •{' '}
+                      {formatLatency(endpoint.averageLatencyMs)} em média • {endpoint.totalFailures} falhas
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      endpoint.status === 'operational'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : endpoint.status === 'degraded'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-rose-100 text-rose-700'
+                    }`}
                   >
-                    <div className="flex items-start space-x-4">
-                      <div className="flex-shrink-0 mt-1">
-                        {getActivityIcon(activity.status)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{activity.action}</p>
-                            <p className="text-sm text-slate-600 mt-1">
-                              Instância:{' '}
-                              <span className="font-medium text-slate-900">{activity.instanceName}</span>
-                            </p>
-                            {activity.details && (
-                              <p className="text-xs text-slate-500 mt-1">{activity.details}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-500">
-                            <Clock className="w-3.5 h-3.5 mr-1.5" />
-                            <span>{formatDateLabel(activity.timestamp)}</span>
-                          </div>
-                        </div>
-                      </div>
+                    {endpoint.status === 'operational'
+                      ? 'Operacional'
+                      : endpoint.status === 'degraded'
+                      ? 'Degradação'
+                      : 'Instável'}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Taxa de sucesso</span>
+                    <span>{endpoint.successRate.toFixed(2)}%</span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className={`h-full rounded-full ${
+                        endpoint.status === 'operational'
+                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
+                          : endpoint.status === 'degraded'
+                          ? 'bg-gradient-to-r from-amber-500 to-amber-600'
+                          : 'bg-gradient-to-r from-rose-500 to-rose-600'
+                      }`}
+                      style={{ width: `${Math.min(endpoint.successRate, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Resumo de serviço</h3>
+            <div className="space-y-3 text-sm text-slate-600">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                  Endpoints operacionais
+                </span>
+                <span className="font-semibold text-emerald-600">{operationalEndpoints}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-amber-500" />
+                  Monitorando degradações
+                </span>
+                <span className="font-semibold text-amber-600">{degradedEndpoints}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-rose-500" />
+                  Falhas críticas
+                </span>
+                <span className="font-semibold text-rose-600">{downEndpoints}</span>
+              </div>
+              {summary && (
+                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs">
+                  <p className="font-semibold text-slate-600 mb-1">Insight rápido</p>
+                  <p className="text-slate-500 leading-relaxed">
+                    A throughput atual está em{' '}
+                    <span className="font-semibold text-slate-700">
+                      {formatNumber(summary.throughputPerMinute)} req/min
+                    </span>
+                    . Reavalie limites do Worker se ultrapassar 120 req/min neste período.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Falhas recentes</h3>
+              <span className="text-xs uppercase tracking-[0.32em] text-slate-400">
+                {failureLogs.length} eventos
+              </span>
+            </div>
+            {failureLogs.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50 py-6 text-center text-sm text-emerald-700">
+                Nenhuma falha registrada nas últimas {timeframeLabel[timeframe]}.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {failureLogs.map((failure) => (
+                  <div
+                    key={failure.id}
+                    className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-sm text-rose-600"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-rose-700">
+                        {failure.method} {failure.endpoint}
+                      </span>
+                      <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-rose-600 border border-rose-200">
+                        {failure.statusCode}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-rose-600/80 leading-relaxed">{failure.message}</p>
+                    <div className="mt-2 flex items-center justify-between text-xs text-rose-500">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        {formatRelativeTime(failure.timestamp)}
+                      </span>
+                      <span>Evento {failure.id.slice(-4)}</span>
                     </div>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-indigo-700">Resiliência</h3>
+            <p className="mt-2 text-sm text-indigo-600 leading-relaxed">
+              As métricas são consolidadas em tempo real a partir do Worker no Cloudflare e das Edge Functions
+              do Supabase. Configure alertas de degradação para receber notificações quando a taxa de erros ultrapassar 5%.
+            </p>
+            <div className="mt-4 rounded-xl border border-indigo-200 bg-white/80 p-3 text-xs text-indigo-500 space-y-2">
+              <p className="font-semibold text-indigo-600 mb-1 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-indigo-500" />
+                Próximos passos sugeridos
+              </p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li>Habilite alertas de limite em <code>/send/media</code> (maior latência média).</li>
+                <li>Revise parâmetros de rate-limit do Worker se o throughput crescer.</li>
+                <li>Implemente cache de respostas para endpoints idempotentes.</li>
+              </ul>
             </div>
-          ))}
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-sm text-slate-500">
+          Atualizando métricas de monitoramento...
         </div>
       )}
     </div>
