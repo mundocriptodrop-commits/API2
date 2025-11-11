@@ -163,8 +163,11 @@ function formatRelativeTime(isoDate: string) {
   return date.toLocaleString('pt-BR');
 }
 
-function formatNumber(value: number) {
-  return value.toLocaleString('pt-BR');
+function formatNumber(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '0';
+  }
+  return Number(value).toLocaleString('pt-BR');
 }
 
 function formatLatency(value: number) {
