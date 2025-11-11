@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Check, ChevronRight, ArrowRight, Send, Image, Smartphone, Zap } from 'lucide-react';
+import { Copy, Check, ChevronRight, ArrowRight, Send, Image, Smartphone, Zap, Plus, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,6 +38,42 @@ type EndpointResponseExample = {
   body: Record<string, unknown>;
 };
 
+type MenuButtonAction = 'reply' | 'url' | 'call' | 'copy';
+
+type MenuButtonConfig = {
+  id: string;
+  label: string;
+  action: MenuButtonAction;
+  value?: string;
+  replyId?: string;
+};
+
+type MenuListItem = {
+  id: string;
+  label: string;
+  value?: string;
+  description?: string;
+};
+
+type MenuListSection = {
+  id: string;
+  title: string;
+  items: MenuListItem[];
+};
+
+type MenuPollOption = {
+  id: string;
+  label: string;
+};
+
+type MenuCarouselCard = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  image?: string;
+  buttons: MenuButtonConfig[];
+};
+
 type EndpointDoc = {
   title: string;
   description: string;
@@ -54,6 +90,42 @@ type EndpointDoc = {
 
 export default function ClientApiTab() {
   const { user } = useAuth();
+  const generateId = () => Math.random().toString(36).slice(2, 10);
+
+  const createMenuButton = (overrides?: Partial<MenuButtonConfig>): MenuButtonConfig => ({
+    id: overrides?.id ?? generateId(),
+    label: overrides?.label ?? 'Novo botão',
+    action: overrides?.action ?? 'reply',
+    value: overrides?.value,
+    replyId: overrides?.replyId ?? '',
+  });
+
+  const createMenuListItem = (overrides?: Partial<MenuListItem>): MenuListItem => ({
+    id: overrides?.id ?? generateId(),
+    label: overrides?.label ?? 'Novo item',
+    value: overrides?.value,
+    description: overrides?.description,
+  });
+
+  const createMenuListSection = (overrides?: Partial<MenuListSection>): MenuListSection => ({
+    id: overrides?.id ?? generateId(),
+    title: overrides?.title ?? 'Nova seção',
+    items: overrides?.items ?? [createMenuListItem()],
+  });
+
+  const createMenuPollOption = (overrides?: Partial<MenuPollOption>): MenuPollOption => ({
+    id: overrides?.id ?? generateId(),
+    label: overrides?.label ?? 'Opção',
+  });
+
+  const createMenuCarouselCard = (overrides?: Partial<MenuCarouselCard>): MenuCarouselCard => ({
+    id: overrides?.id ?? generateId(),
+    title: overrides?.title ?? 'Novo cartão',
+    subtitle: overrides?.subtitle,
+    image: overrides?.image,
+    buttons: overrides?.buttons ?? [createMenuButton({ label: 'Comprar agora', replyId: 'COMPRAR', action: 'reply' })],
+  });
+
   const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
   const [testNumber, setTestNumber] = useState('5511999999999');
   const [testMessage, setTestMessage] = useState('Olá! Como posso ajudar?');
@@ -65,11 +137,39 @@ export default function ClientApiTab() {
   
   // Estados para send-menu
   const [menuType, setMenuType] = useState('button');
-  const [menuChoices, setMenuChoices] = useState('Suporte Técnico|suporte\nFazer Pedido|pedido\nNosso Site|https://exemplo.com');
   const [footerText, setFooterText] = useState('Escolha uma das opções abaixo');
   const [listButton, setListButton] = useState('Ver Opções');
   const [selectableCount, setSelectableCount] = useState(1);
   const [imageButton, setImageButton] = useState('');
+  const [menuButtons, setMenuButtons] = useState<MenuButtonConfig[]>([
+    createMenuButton({ label: 'Suporte Técnico', replyId: 'suporte' }),
+    createMenuButton({ label: 'Fazer Pedido', replyId: 'pedido' }),
+    createMenuButton({ label: 'Nosso Site', action: 'url', value: 'https://exemplo.com' }),
+  ]);
+  const [menuListSections, setMenuListSections] = useState<MenuListSection[]>([
+    createMenuListSection({
+      title: 'Serviços',
+      items: [
+        createMenuListItem({ label: 'Suporte Técnico', value: 'suporte', description: 'Atendimento imediato' }),
+        createMenuListItem({ label: 'Fazer Pedido', value: 'pedido', description: 'Monte seu pedido completo' }),
+      ],
+    }),
+  ]);
+  const [menuPollOptions, setMenuPollOptions] = useState<MenuPollOption[]>([
+    createMenuPollOption({ label: 'Opção 1' }),
+    createMenuPollOption({ label: 'Opção 2' }),
+  ]);
+  const [menuCarouselCards, setMenuCarouselCards] = useState<MenuCarouselCard[]>([
+    createMenuCarouselCard({
+      title: 'Produto Exemplo',
+      subtitle: 'Descrição resumida do produto',
+      image: 'https://exemplo.com/produto.jpg',
+      buttons: [
+        createMenuButton({ label: 'Comprar Agora', replyId: 'COMPRAR_PRODUTO', action: 'reply' }),
+        createMenuButton({ label: 'Ver Detalhes', action: 'url', value: 'https://exemplo.com/produto' }),
+      ],
+    }),
+  ]);
   
   // Estados para send-carousel
   const [carouselItems, setCarouselItems] = useState('Produto Exemplo');
@@ -117,6 +217,223 @@ export default function ClientApiTab() {
   const apiBaseUrl = baseUrlCandidates[0]!;
   const requiresSupabaseAuth = sanitizedSupabaseUrl !== undefined && apiBaseUrl === sanitizedSupabaseUrl;
   const buildEndpointUrl = (path: string) => `${apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const ensureMenuDefaults = (type: string) => {
+    if (type === 'button' && menuButtons.length === 0) {
+      setMenuButtons([createMenuButton()]);
+    }
+    if (type === 'list' && menuListSections.length === 0) {
+      setMenuListSections([createMenuListSection()]);
+    }
+    if (type === 'poll' && menuPollOptions.length === 0) {
+      setMenuPollOptions([createMenuPollOption(), createMenuPollOption()]);
+    }
+    if (type === 'carousel' && menuCarouselCards.length === 0) {
+      setMenuCarouselCards([createMenuCarouselCard()]);
+    }
+  };
+
+  const handleMenuTypeChange = (nextType: string) => {
+    setMenuType(nextType);
+    ensureMenuDefaults(nextType);
+  };
+
+  const handleAddMenuButton = () => {
+    setMenuButtons((prev) => [...prev, createMenuButton({ label: `Botão ${prev.length + 1}` })]);
+  };
+
+  const handleUpdateMenuButton = (buttonId: string, updates: Partial<MenuButtonConfig>) => {
+    setMenuButtons((prev) =>
+      prev.map((button) =>
+        button.id === buttonId
+          ? {
+              ...button,
+              ...updates,
+              value: updates.value !== undefined ? updates.value : button.value,
+              replyId: updates.replyId !== undefined ? updates.replyId : button.replyId,
+            }
+          : button
+      )
+    );
+  };
+
+  const handleRemoveMenuButton = (buttonId: string) => {
+    setMenuButtons((prev) => {
+      if (prev.length === 1) return prev;
+      return prev.filter((button) => button.id !== buttonId);
+    });
+  };
+
+  const handleAddMenuListSection = () => {
+    setMenuListSections((prev) => [...prev, createMenuListSection({ title: `Seção ${prev.length + 1}` })]);
+  };
+
+  const handleUpdateMenuListSection = (sectionId: string, updates: Partial<MenuListSection>) => {
+    setMenuListSections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              ...updates,
+              items: updates.items ?? section.items,
+            }
+          : section
+      )
+    );
+  };
+
+  const handleRemoveMenuListSection = (sectionId: string) => {
+    setMenuListSections((prev) => {
+      if (prev.length === 1) return prev;
+      return prev.filter((section) => section.id !== sectionId);
+    });
+  };
+
+  const handleAddMenuListItem = (sectionId: string) => {
+    setMenuListSections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items: [...section.items, createMenuListItem({ label: `Item ${section.items.length + 1}` })],
+            }
+          : section
+      )
+    );
+  };
+
+  const handleUpdateMenuListItem = (sectionId: string, itemId: string, updates: Partial<MenuListItem>) => {
+    setMenuListSections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items: section.items.map((item) =>
+                item.id === itemId
+                  ? {
+                      ...item,
+                      ...updates,
+                    }
+                  : item
+              ),
+            }
+          : section
+      )
+    );
+  };
+
+  const handleRemoveMenuListItem = (sectionId: string, itemId: string) => {
+    setMenuListSections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items: section.items.length === 1 ? section.items : section.items.filter((item) => item.id !== itemId),
+            }
+          : section
+      )
+    );
+  };
+
+  const handleAddMenuPollOption = () => {
+    setMenuPollOptions((prev) => [...prev, createMenuPollOption({ label: `Opção ${prev.length + 1}` })]);
+  };
+
+  const handleUpdateMenuPollOption = (optionId: string, label: string) => {
+    setMenuPollOptions((prev) =>
+      prev.map((option) =>
+        option.id === optionId
+          ? {
+              ...option,
+              label,
+            }
+          : option
+      )
+    );
+  };
+
+  const handleRemoveMenuPollOption = (optionId: string) => {
+    setMenuPollOptions((prev) => {
+      if (prev.length <= 2) return prev;
+      return prev.filter((option) => option.id !== optionId);
+    });
+  };
+
+  const handleAddMenuCarouselCard = () => {
+    setMenuCarouselCards((prev) => [
+      ...prev,
+      createMenuCarouselCard({ title: `Cartão ${prev.length + 1}`, buttons: [createMenuButton()] }),
+    ]);
+  };
+
+  const handleUpdateMenuCarouselCard = (cardId: string, updates: Partial<MenuCarouselCard>) => {
+    setMenuCarouselCards((prev) =>
+      prev.map((card) =>
+        card.id === cardId
+          ? {
+              ...card,
+              ...updates,
+              buttons: updates.buttons ?? card.buttons,
+            }
+          : card
+      )
+    );
+  };
+
+  const handleRemoveMenuCarouselCard = (cardId: string) => {
+    setMenuCarouselCards((prev) => {
+      if (prev.length === 1) return prev;
+      return prev.filter((card) => card.id !== cardId);
+    });
+  };
+
+  const handleAddButtonToCarouselCard = (cardId: string) => {
+    setMenuCarouselCards((prev) =>
+      prev.map((card) =>
+        card.id === cardId
+          ? {
+              ...card,
+              buttons: [...card.buttons, createMenuButton({ label: `Botão ${card.buttons.length + 1}` })],
+            }
+          : card
+      )
+    );
+  };
+
+  const handleUpdateCarouselButton = (cardId: string, buttonId: string, updates: Partial<MenuButtonConfig>) => {
+    setMenuCarouselCards((prev) =>
+      prev.map((card) =>
+        card.id === cardId
+          ? {
+              ...card,
+              buttons: card.buttons.map((button) =>
+                button.id === buttonId
+                  ? {
+                      ...button,
+                      ...updates,
+                      value: updates.value !== undefined ? updates.value : button.value,
+                      replyId: updates.replyId !== undefined ? updates.replyId : button.replyId,
+                    }
+                  : button
+              ),
+            }
+          : card
+      )
+    );
+  };
+
+  const handleRemoveCarouselButton = (cardId: string, buttonId: string) => {
+    setMenuCarouselCards((prev) =>
+      prev.map((card) =>
+        card.id === cardId
+          ? {
+              ...card,
+              buttons: card.buttons.length === 1 ? card.buttons : card.buttons.filter((button) => button.id !== buttonId),
+            }
+          : card
+      )
+    );
+  };
 
   useEffect(() => {
     if (user) {
@@ -167,21 +484,155 @@ export default function ClientApiTab() {
           ...(mediaType === 'document' && docName ? { docName } : {}),
         };
       case 'send-menu': {
-        const choices = menuChoices
-          .split('\n')
-          .map((choice) => choice.trim())
-          .filter((choice) => choice !== '');
-
-        return {
+        const payload: Record<string, unknown> = {
           number: testNumber,
           type: menuType,
           text: testMessage,
-          choices,
-          ...(footerText ? { footerText } : {}),
-          ...(menuType === 'list' && listButton ? { listButton } : {}),
-          ...(menuType === 'poll' && selectableCount ? { selectableCount } : {}),
-          ...(imageButton ? { imageButton } : {}),
         };
+
+        const choices: string[] = [];
+
+        if (menuType === 'button') {
+          menuButtons.forEach((button) => {
+            const label = button.label.trim();
+            if (!label) return;
+
+            let formatted = label;
+
+            switch (button.action) {
+              case 'reply': {
+                const replyId = button.replyId?.trim();
+                formatted = replyId ? `${label}|${replyId}` : label;
+                break;
+              }
+              case 'url': {
+                const url = button.value?.trim();
+                if (!url) return;
+                formatted = `${label}|${url}`;
+                break;
+              }
+              case 'call': {
+                const phone = button.value?.trim();
+                if (!phone) return;
+                formatted = `${label}|call:${phone}`;
+                break;
+              }
+              case 'copy': {
+                const code = button.value?.trim();
+                if (!code) return;
+                formatted = `${label}|copy:${code}`;
+                break;
+              }
+              default:
+                break;
+            }
+
+            choices.push(formatted);
+          });
+
+          if (imageButton) {
+            payload.imageButton = imageButton;
+          }
+          if (footerText) {
+            payload.footerText = footerText;
+          }
+        }
+
+        if (menuType === 'list') {
+          menuListSections.forEach((section) => {
+            const title = section.title.trim();
+            if (title) {
+              choices.push(`[${title}]`);
+            }
+            section.items.forEach((item) => {
+              const label = item.label.trim();
+              if (!label) return;
+              const parts = [label];
+              if (item.value?.trim()) {
+                parts.push(item.value.trim());
+              }
+              if (item.description?.trim()) {
+                parts.push(item.description.trim());
+              }
+              choices.push(parts.join('|'));
+            });
+          });
+
+          if (footerText) {
+            payload.footerText = footerText;
+          }
+          if (listButton) {
+            payload.listButton = listButton;
+          }
+        }
+
+        if (menuType === 'poll') {
+          menuPollOptions.forEach((option) => {
+            const label = option.label.trim();
+            if (!label) return;
+            choices.push(label);
+          });
+          payload.selectableCount = selectableCount;
+        }
+
+        if (menuType === 'carousel') {
+          menuCarouselCards.forEach((card) => {
+            const title = card.title.trim();
+            const subtitle = card.subtitle?.trim();
+            if (title) {
+              const cardText = subtitle ? `${title}\n${subtitle}` : title;
+              choices.push(`[${cardText}]`);
+            }
+            const image = card.image?.trim();
+            if (image) {
+              choices.push(`{${image}}`);
+            }
+            card.buttons.forEach((button) => {
+              const label = button.label.trim();
+              if (!label) return;
+
+              let formatted = label;
+
+              switch (button.action) {
+                case 'reply': {
+                  const replyId = button.replyId?.trim();
+                  formatted = replyId ? `${label}|${replyId}` : label;
+                  break;
+                }
+                case 'url': {
+                  const url = button.value?.trim();
+                  if (!url) return;
+                  formatted = `${label}|${url}`;
+                  break;
+                }
+                case 'call': {
+                  const phone = button.value?.trim();
+                  if (!phone) return;
+                  formatted = `${label}|call:${phone}`;
+                  break;
+                }
+                case 'copy': {
+                  const code = button.value?.trim();
+                  if (!code) return;
+                  formatted = `${label}|copy:${code}`;
+                  break;
+                }
+                default:
+                  break;
+              }
+
+              choices.push(formatted);
+            });
+          });
+
+          if (footerText) {
+            payload.footerText = footerText;
+          }
+        }
+
+        payload.choices = choices;
+
+        return payload;
       }
       case 'send-carousel':
         return {
@@ -1461,7 +1912,7 @@ export default function ClientApiTab() {
                               <span className="text-slate-400">:</span>
                               <select
                                 value={menuType}
-                                onChange={(e) => setMenuType(e.target.value)}
+                                onChange={(e) => handleMenuTypeChange(e.target.value)}
                                 className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                               >
                                 <option value="button">button</option>
@@ -1481,63 +1932,466 @@ export default function ClientApiTab() {
                                 className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                               />
                             </div>
-                            <div className="flex items-start space-x-2">
-                              <span className="text-cyan-400 font-semibold mt-2">"choices"</span>
-                              <span className="text-slate-400 mt-2">:</span>
-                              <textarea
-                                value={menuChoices}
-                                onChange={(e) => setMenuChoices(e.target.value)}
-                                placeholder="Uma opção por linha. Formato: texto|id"
-                                rows={4}
-                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-none"
-                              />
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-cyan-400 font-semibold">"footerText"</span>
-                              <span className="text-slate-400">:</span>
-                              <input
-                                type="text"
-                                value={footerText}
-                                onChange={(e) => setFooterText(e.target.value)}
-                                placeholder="Texto do rodapé (opcional)"
-                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-                              />
-                            </div>
-                            {menuType === 'list' && (
-                              <div className="flex items-center space-x-2">
-                                <span className="text-cyan-400 font-semibold">"listButton"</span>
-                                <span className="text-slate-400">:</span>
-                                <input
-                                  type="text"
-                                  value={listButton}
-                                  onChange={(e) => setListButton(e.target.value)}
-                                  placeholder="Texto do botão"
-                                  className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-                                />
-                              </div>
-                            )}
-                            {menuType === 'poll' && (
-                              <div className="flex items-center space-x-2">
-                                <span className="text-cyan-400 font-semibold">"selectableCount"</span>
-                                <span className="text-slate-400">:</span>
-                                <input
-                                  type="number"
-                                  value={selectableCount}
-                                  onChange={(e) => setSelectableCount(parseInt(e.target.value) || 1)}
-                                  placeholder="Número de opções selecionáveis"
-                                  className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-                                />
-                              </div>
-                            )}
+
                             {menuType === 'button' && (
+                              <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-cyan-400 font-semibold">"imageButton"</span>
+                                  <span className="text-slate-400">:</span>
+                                  <input
+                                    type="text"
+                                    value={imageButton}
+                                    onChange={(e) => setImageButton(e.target.value)}
+                                    placeholder="URL da imagem (opcional)"
+                                    className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  {menuButtons.map((button, index) => (
+                                    <div
+                                      key={button.id}
+                                      className="bg-slate-800/40 border border-slate-700 rounded-lg p-3 space-y-3"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs uppercase tracking-wide text-slate-300 font-semibold">
+                                          Botão {index + 1}
+                                        </span>
+                                        <div className="flex items-center space-x-2">
+                                          <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                                            {button.action}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveMenuButton(button.id)}
+                                            disabled={menuButtons.length === 1}
+                                            className="p-1.5 rounded-md bg-slate-700/40 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5 text-slate-300" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        <div className="space-y-1.5">
+                                          <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                            Texto do botão
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={button.label}
+                                            onChange={(e) => handleUpdateMenuButton(button.id, { label: e.target.value })}
+                                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                          />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                            Ação
+                                          </label>
+                                          <select
+                                            value={button.action}
+                                            onChange={(e) =>
+                                              handleUpdateMenuButton(button.id, {
+                                                action: e.target.value as MenuButtonAction,
+                                                value: '',
+                                                replyId: '',
+                                              })
+                                            }
+                                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                          >
+                                            <option value="reply">Resposta rápida</option>
+                                            <option value="url">Abrir link</option>
+                                            <option value="call">Chamada telefônica</option>
+                                            <option value="copy">Copiar código</option>
+                                          </select>
+                                        </div>
+                                      </div>
+                                      {button.action === 'reply' && (
+                                        <div className="space-y-1.5">
+                                          <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                            ID da resposta (opcional)
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={button.replyId ?? ''}
+                                            onChange={(e) => handleUpdateMenuButton(button.id, { replyId: e.target.value })}
+                                            placeholder="Ex.: suporte"
+                                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                          />
+                                        </div>
+                                      )}
+                                      {button.action !== 'reply' && (
+                                        <div className="space-y-1.5">
+                                          <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                            {button.action === 'url'
+                                              ? 'URL do botão'
+                                              : button.action === 'call'
+                                              ? 'Número para ligação'
+                                              : 'Texto para copiar'}
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={button.value ?? ''}
+                                            onChange={(e) => handleUpdateMenuButton(button.id, { value: e.target.value })}
+                                            placeholder={
+                                              button.action === 'url'
+                                                ? 'https://...'
+                                                : button.action === 'call'
+                                                ? '+5511999999999'
+                                                : 'CÓDIGO123'
+                                            }
+                                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleAddMenuButton}
+                                  className="flex items-center justify-center w-full bg-slate-800/40 hover:bg-slate-800 border border-dashed border-slate-600 rounded-lg py-2.5 text-xs text-slate-200 transition-colors"
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Adicionar botão
+                                </button>
+                              </div>
+                            )}
+
+                            {menuType === 'list' && (
+                              <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-cyan-400 font-semibold">"listButton"</span>
+                                  <span className="text-slate-400">:</span>
+                                  <input
+                                    type="text"
+                                    value={listButton}
+                                    onChange={(e) => setListButton(e.target.value)}
+                                    placeholder="Texto exibido no botão principal"
+                                    className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                  />
+                                </div>
+                                <div className="space-y-3">
+                                  {menuListSections.map((section, sectionIndex) => (
+                                    <div key={section.id} className="bg-slate-800/40 border border-slate-700 rounded-lg p-3 space-y-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs uppercase tracking-wide text-slate-300 font-semibold">
+                                          Seção {sectionIndex + 1}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveMenuListSection(section.id)}
+                                          disabled={menuListSections.length === 1}
+                                          className="p-1.5 rounded-md bg-slate-700/40 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5 text-slate-300" />
+                                        </button>
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        <label className="text-[11px] text-slate-400 uppercase tracking-wide">Título da seção</label>
+                                        <input
+                                          type="text"
+                                          value={section.title}
+                                          onChange={(e) => handleUpdateMenuListSection(section.id, { title: e.target.value })}
+                                          className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        {section.items.map((item, itemIndex) => (
+                                          <div key={item.id} className="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-[11px] uppercase tracking-wide text-slate-400">
+                                                Item {itemIndex + 1}
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemoveMenuListItem(section.id, item.id)}
+                                                disabled={section.items.length === 1}
+                                                className="p-1 rounded-md bg-slate-800/60 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5 text-slate-300" />
+                                              </button>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                              <div className="space-y-1">
+                                                <label className="text-[11px] text-slate-400 uppercase tracking-wide">Texto</label>
+                                                <input
+                                                  type="text"
+                                                  value={item.label}
+                                                  onChange={(e) =>
+                                                    handleUpdateMenuListItem(section.id, item.id, { label: e.target.value })
+                                                  }
+                                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                                />
+                                              </div>
+                                              <div className="space-y-1">
+                                                <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                                  ID (opcional)
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={item.value ?? ''}
+                                                  onChange={(e) =>
+                                                    handleUpdateMenuListItem(section.id, item.id, { value: e.target.value })
+                                                  }
+                                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                                Descrição (opcional)
+                                              </label>
+                                              <input
+                                                type="text"
+                                                value={item.description ?? ''}
+                                                onChange={(e) =>
+                                                  handleUpdateMenuListItem(section.id, item.id, { description: e.target.value })
+                                                }
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                              />
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddMenuListItem(section.id)}
+                                        className="flex items-center justify-center w-full bg-slate-800/40 hover:bg-slate-800 border border-dashed border-slate-600 rounded-lg py-2 text-xs text-slate-200 transition-colors"
+                                      >
+                                        <Plus className="w-4 h-4 mr-1" />
+                                        Adicionar item
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleAddMenuListSection}
+                                  className="flex items-center justify-center w-full bg-slate-800/40 hover:bg-slate-800 border border-dashed border-slate-600 rounded-lg py-2.5 text-xs text-slate-200 transition-colors"
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Adicionar seção
+                                </button>
+                              </div>
+                            )}
+
+                            {menuType === 'poll' && (
+                              <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-cyan-400 font-semibold">"selectableCount"</span>
+                                  <span className="text-slate-400">:</span>
+                                  <input
+                                    type="number"
+                                    value={selectableCount}
+                                    min={1}
+                                    onChange={(e) => setSelectableCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                    placeholder="Número máximo de opções que podem ser escolhidas"
+                                    className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  {menuPollOptions.map((option, index) => (
+                                    <div key={option.id} className="flex items-center space-x-2">
+                                      <span className="text-[11px] text-slate-400 uppercase tracking-wide w-16">
+                                        Opção {index + 1}
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={option.label}
+                                        onChange={(e) => handleUpdateMenuPollOption(option.id, e.target.value)}
+                                        className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveMenuPollOption(option.id)}
+                                        disabled={menuPollOptions.length <= 2}
+                                        className="p-1.5 rounded-md bg-slate-700/40 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-slate-300" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleAddMenuPollOption}
+                                  className="flex items-center justify-center w-full bg-slate-800/40 hover:bg-slate-800 border border-dashed border-slate-600 rounded-lg py-2 text-xs text-slate-200 transition-colors"
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Adicionar opção
+                                </button>
+                              </div>
+                            )}
+
+                            {menuType === 'carousel' && (
+                              <div className="space-y-3">
+                                {menuCarouselCards.map((card, cardIndex) => (
+                                  <div key={card.id} className="bg-slate-800/40 border border-slate-700 rounded-lg p-3 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs uppercase tracking-wide text-slate-300 font-semibold">
+                                        Cartão {cardIndex + 1}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveMenuCarouselCard(card.id)}
+                                        disabled={menuCarouselCards.length === 1}
+                                        className="p-1.5 rounded-md bg-slate-700/40 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-slate-300" />
+                                      </button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                          Título do cartão
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={card.title}
+                                          onChange={(e) => handleUpdateMenuCarouselCard(card.id, { title: e.target.value })}
+                                          className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                          Subtítulo (opcional)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={card.subtitle ?? ''}
+                                          onChange={(e) => handleUpdateMenuCarouselCard(card.id, { subtitle: e.target.value })}
+                                          className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                        Imagem (URL ou base64)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={card.image ?? ''}
+                                        onChange={(e) => handleUpdateMenuCarouselCard(card.id, { image: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      {card.buttons.map((button, idx) => (
+                                        <div key={button.id} className="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[11px] uppercase tracking-wide text-slate-400">
+                                              Botão {idx + 1}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveCarouselButton(card.id, button.id)}
+                                              disabled={card.buttons.length === 1}
+                                              className="p-1 rounded-md bg-slate-800/60 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5 text-slate-300" />
+                                            </button>
+                                          </div>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                              <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                                Texto
+                                              </label>
+                                              <input
+                                                type="text"
+                                                value={button.label}
+                                                onChange={(e) =>
+                                                  handleUpdateCarouselButton(card.id, button.id, { label: e.target.value })
+                                                }
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                              />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                                Ação
+                                              </label>
+                                              <select
+                                                value={button.action}
+                                                onChange={(e) =>
+                                                  handleUpdateCarouselButton(card.id, button.id, {
+                                                    action: e.target.value as MenuButtonAction,
+                                                    value: '',
+                                                    replyId: '',
+                                                  })
+                                                }
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                              >
+                                                <option value="reply">Resposta rápida</option>
+                                                <option value="url">Abrir link</option>
+                                                <option value="call">Chamada telefônica</option>
+                                                <option value="copy">Copiar código</option>
+                                              </select>
+                                            </div>
+                                          </div>
+                                          {button.action === 'reply' ? (
+                                            <div className="space-y-1">
+                                              <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                                ID da resposta (opcional)
+                                              </label>
+                                              <input
+                                                type="text"
+                                                value={button.replyId ?? ''}
+                                                onChange={(e) =>
+                                                  handleUpdateCarouselButton(card.id, button.id, { replyId: e.target.value })
+                                                }
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                              />
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-1">
+                                              <label className="text-[11px] text-slate-400 uppercase tracking-wide">
+                                                {button.action === 'url'
+                                                  ? 'URL do botão'
+                                                  : button.action === 'call'
+                                                  ? 'Número para ligação'
+                                                  : 'Texto para copiar'}
+                                              </label>
+                                              <input
+                                                type="text"
+                                                value={button.value ?? ''}
+                                                onChange={(e) =>
+                                                  handleUpdateCarouselButton(card.id, button.id, { value: e.target.value })
+                                                }
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddButtonToCarouselCard(card.id)}
+                                      className="flex items-center justify-center w-full bg-slate-800/40 hover:bg-slate-800 border border-dashed border-slate-600 rounded-lg py-2 text-xs text-slate-200 transition-colors"
+                                    >
+                                      <Plus className="w-4 h-4 mr-1" />
+                                      Adicionar botão ao cartão
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={handleAddMenuCarouselCard}
+                                  className="flex items-center justify-center w-full bg-slate-800/40 hover:bg-slate-800 border border-dashed border-slate-600 rounded-lg py-2.5 text-xs text-slate-200 transition-colors"
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Adicionar cartão
+                                </button>
+                              </div>
+                            )}
+
+                            {(menuType === 'button' || menuType === 'list' || menuType === 'carousel') && (
                               <div className="flex items-center space-x-2">
-                                <span className="text-cyan-400 font-semibold">"imageButton"</span>
+                                <span className="text-cyan-400 font-semibold">"footerText"</span>
                                 <span className="text-slate-400">:</span>
                                 <input
                                   type="text"
-                                  value={imageButton}
-                                  onChange={(e) => setImageButton(e.target.value)}
-                                  placeholder="URL da imagem (opcional)"
+                                  value={footerText}
+                                  onChange={(e) => setFooterText(e.target.value)}
+                                  placeholder="Texto do rodapé (opcional)"
                                   className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                                 />
                               </div>
