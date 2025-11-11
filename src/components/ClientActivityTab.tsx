@@ -174,8 +174,9 @@ function formatLatency(value: number) {
   return `${Math.round(value)} ms`;
 }
 
-function renderChangeBadge(value: number, positiveIsGood = true) {
-  const isPositive = value >= 0;
+function renderChangeBadge(value: number | null | undefined, positiveIsGood = true) {
+  const numericValue = Number.isFinite(value as number) ? Number(value) : 0;
+  const isPositive = numericValue >= 0;
   const Icon = isPositive ? TrendingUp : TrendingDown;
   const isGood = positiveIsGood ? isPositive : !isPositive;
   const classes = isGood ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
@@ -183,7 +184,7 @@ function renderChangeBadge(value: number, positiveIsGood = true) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${classes}`}>
       <Icon className="w-3.5 h-3.5" />
-      {`${isPositive ? '+' : ''}${value.toFixed(1)}%`}
+      {`${isPositive ? '+' : ''}${numericValue.toFixed(1)}%`}
     </span>
   );
 }
