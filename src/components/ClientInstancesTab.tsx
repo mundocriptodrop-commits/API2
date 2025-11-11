@@ -17,7 +17,12 @@ interface ConfirmState {
   type?: 'danger' | 'warning';
 }
 
-export default function ClientInstancesTab() {
+interface ClientInstancesTabProps {
+  openCreate?: boolean;
+  onCloseCreate?: () => void;
+}
+
+export default function ClientInstancesTab({ openCreate = false, onCloseCreate }: ClientInstancesTabProps) {
   const { user, profile } = useAuth();
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +44,12 @@ export default function ClientInstancesTab() {
     onConfirm: () => {},
   });
 
+  useEffect(() => {
+    if (openCreate) {
+      setShowCreateModal(true);
+    }
+  }, [openCreate]);
+
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     const id = Math.random().toString(36).substr(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -46,6 +57,12 @@ export default function ClientInstancesTab() {
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setInstanceName('');
+    onCloseCreate?.();
   };
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, type: 'danger' | 'warning' = 'danger') => {
@@ -115,8 +132,7 @@ export default function ClientInstancesTab() {
         if (error) throw error;
 
         showToast('Instância criada com sucesso!', 'success');
-        setShowCreateModal(false);
-        setInstanceName('');
+        closeCreateModal();
         await loadInstances();
       } else {
         throw new Error('API não retornou token de instância');
@@ -553,10 +569,7 @@ export default function ClientInstancesTab() {
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setInstanceName('');
-                }}
+                onClick={closeCreateModal}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancelar

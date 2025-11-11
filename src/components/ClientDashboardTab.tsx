@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import type { MouseEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -11,17 +12,25 @@ import {
   Search,
   Plus,
   Power,
+  Copy,
+  Check,
 } from 'lucide-react';
 import type { Database } from '../lib/database.types';
 
 type WhatsAppInstance = Database['public']['Tables']['whatsapp_instances']['Row'];
 
-export default function ClientDashboardTab() {
+interface ClientDashboardTabProps {
+  onRequestCreateInstance?: () => void;
+}
+
+export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDashboardTabProps) {
   const { user, profile } = useAuth();
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<'all' | 'connected' | 'connecting' | 'disconnected'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -83,8 +92,44 @@ export default function ClientDashboardTab() {
     });
   }, [instances, filterStatus, searchTerm]);
 
+  useEffect(() => {
+    if (!openActionsId) return;
+
+    const close = () => setOpenActionsId(null);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenActionsId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openActionsId]);
+
   const handleRefresh = async () => {
+    setOpenActionsId(null);
     await loadInstances();
+  };
+
+  const handleToggleActions = (event: MouseEvent<HTMLButtonElement>, id: string) => {
+    event.stopPropagation();
+    setOpenActionsId((prev) => (prev === id ? null : id));
+  };
+
+  const handleCopy = async (value: string | null | undefined, id: string, type: 'token' | 'id') => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(`${id}-${type}`);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch (error) {
+      console.error('Erro ao copiar valor:', error);
+    }
   };
 
   const getStatusBadge = (status: WhatsAppInstance['status']) => {
@@ -133,6 +178,10 @@ export default function ClientDashboardTab() {
             Atualizar
           </button>
           <button
+            onClick={() => {
+              setOpenActionsId(null);
+              onRequestCreateInstance?.();
+            }}
             className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2 text-sm font-semibold text-white shadow shadow-blue-500/25 hover:shadow-md transition"
           >
             <Plus className="w-4 h-4" />
@@ -287,37 +336,100 @@ export default function ClientDashboardTab() {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredInstances.slice(0, 8).map((instance) => (
-              <div
-                key={instance.id}
-                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm transition hover:bg-slate-50 md:flex-row md:items-center md:justify-between"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20">
-                    <Smartphone className="w-5 h-5 text-blue-500" />
+            {filteredInstances.slice(0, 8).map((instance) => {
+              const updatedAt = instance.updated_at ?? instance.created_at ?? '';
+              return (
+                <div
+                  key={instance.id}
+                  className="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm transition hover:bg-slate-50 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20">
+                      <Smartphone className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{instance.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {instance.phone_number ?? 'Sem número configurado'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Atualizada em {updatedAt ? new Date(updatedAt).toLocaleString('pt-BR') : '—'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{instance.name}</p>
-                    <p className="text-sm text-slate-500">
-                      {instance.phone_number ?? 'Sem número configurado'}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Atualizada em{' '}
-                      {new Date(instance.updated_at ?? instance.created_at ?? '').toLocaleString('pt-BR')}
-                    </p>
+                  <div className="flex flex-col-reverse gap-3 md:flex-row md:items-center md:gap-4">
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(instance.status)}`}
+                    >
+                      {getStatusLabel(instance.status)}
+                    </span>
+                    <div className="relative">
+                      <button
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => handleToggleActions(event, instance.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition"
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                        Ações rápidas
+                      </button>
+                      {openActionsId === instance.id && (
+                        <div
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-500/10"
+                        >
+                          <p className="px-2 pb-2 text-[11px] uppercase tracking-[0.32em] text-slate-400">
+                            Atalhos
+                          </p>
+                          <div className="space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(instance.instance_token, instance.id, 'token')}
+                              disabled={!instance.instance_token}
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <span>Copiar token</span>
+                              {copiedKey === `${instance.id}-token` ? (
+                                <Check className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-slate-400" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(instance.id, instance.id, 'id')}
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-100"
+                            >
+                              <span>Copiar ID da instância</span>
+                              {copiedKey === `${instance.id}-id` ? (
+                                <Check className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-slate-400" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenActionsId(null);
+                                window.open(
+                                  'mailto:suporte@evasend.com.br?subject=Ajuda com instância&body=Olá, preciso de suporte para a instância ' +
+                                    encodeURIComponent(instance.name),
+                                  '_blank'
+                                );
+                              }}
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-100"
+                            >
+                              <span>Solicitar suporte</span>
+                              <AlertCircle className="w-4 h-4 text-amber-500" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col-reverse gap-3 md:flex-row md:items-center md:gap-4">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(instance.status)}`}>
-                    {getStatusLabel(instance.status)}
-                  </span>
-                  <button className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
-                    <Power className="w-3.5 h-3.5" />
-                    Ações rápidas
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
