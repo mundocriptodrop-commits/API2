@@ -71,11 +71,6 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
                     </div>
                   </div>
                 </div>
-                {isActive && (
-                  <span className="px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] bg-white/20 rounded-full text-white shadow-sm">
-                    ativo
-                  </span>
-                )}
               </button>
             );
           })}
