@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Activity,
   WifiOff,
+  Search,
+  Link,
 } from 'lucide-react';
 import type { Database } from '../lib/database.types';
 import ToastContainer, { type ToastMessage } from './ToastContainer';
@@ -55,6 +57,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     message: '',
     onConfirm: () => {},
   });
+  const [filterStatus, setFilterStatus] = useState<'all' | 'connected' | 'connecting' | 'disconnected'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const summary = useMemo(() => {
     const connected = instances.filter((instance) => instance.status === 'connected').length;
@@ -74,6 +78,24 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       usagePercent,
     };
   }, [instances, profile]);
+
+  const filteredInstances = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return instances.filter((instance) => {
+      if (filterStatus !== 'all' && instance.status !== filterStatus) {
+        return false;
+      }
+
+      if (term) {
+        const haystack = `${instance.name ?? ''} ${instance.phone_number ?? ''}`.toLowerCase();
+        if (!haystack.includes(term)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [instances, filterStatus, searchTerm]);
 
   useEffect(() => {
     if (openCreate) {
@@ -102,6 +124,25 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
   const hideConfirm = () => {
     setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+  };
+
+  const handleCopyToken = async (token?: string | null) => {
+    if (!token) {
+      showToast('Token indisponível para esta instância', 'warning');
+      return;
+    }
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(token);
+        showToast('Token copiado para a área de transferência', 'success');
+      } else {
+        throw new Error('Clipboard API não suportada');
+      }
+    } catch (error) {
+      console.error('Erro ao copiar token:', error);
+      showToast('Não foi possível copiar o token', 'error');
+    }
   };
 
   useEffect(() => {
@@ -488,60 +529,205 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Minhas Instâncias</h2>
-          <p className="text-gray-500 mt-1">
-            {instances.length} de {profile?.max_instances || 0} instâncias utilizadas
-          </p>
+    <div className="space-y-8">
+      <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-8 text-white shadow-xl">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="max-w-xl space-y-3">
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-300">Painel de Instâncias</p>
+            <h1 className="text-3xl font-semibold leading-tight">Minhas Instâncias</h1>
+            <p className="text-sm text-slate-300">
+              Gerencie suas conexões WhatsApp, acompanhe status em tempo real e crie novas instâncias sempre que precisar.
+            </p>
+          </div>
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                <Smartphone className="h-6 w-6 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-300">Em uso</p>
+                <p className="text-lg font-semibold">
+                  {summary.total} {summary.limit ? `de ${summary.limit}` : ''}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              disabled={summary.limit !== null && summary.limit !== undefined && summary.limit > 0 && summary.total >= summary.limit}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow shadow-emerald-400/25 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Instância
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          disabled={instances.length >= (profile?.max_instances || 0)}
-          className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Nova Instância</span>
-        </button>
+
+        {summary.usagePercent !== null && summary.usagePercent !== undefined && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between text-xs text-slate-300">
+              <span>Utilização do limite</span>
+              <span>{summary.usagePercent}%</span>
+            </div>
+            <div className="mt-2 h-2 w-full rounded-full bg-white/10">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all"
+                style={{ width: `${summary.usagePercent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {instances.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma instância criada</h3>
-          <p className="text-gray-500 mb-6">
-            Crie sua primeira instância para começar a usar o WhatsApp
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Total</p>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-3xl font-semibold text-slate-800">{summary.total}</span>
+            <Smartphone className="h-5 w-5 text-blue-500" />
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            {summary.limit ? `${summary.available} instâncias disponíveis` : 'Plano sem limite configurado'}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.3em] text-emerald-500">Conectadas</p>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-3xl font-semibold text-emerald-600">{summary.connected}</span>
+            <ShieldCheck className="h-5 w-5 text-emerald-500" />
+          </div>
+          <p className="mt-3 text-xs text-emerald-600">Operacionais e prontas para envio</p>
+        </div>
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.3em] text-amber-500">Conectando</p>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-3xl font-semibold text-amber-600">{summary.connecting}</span>
+            <Activity className="h-5 w-5 text-amber-500" />
+          </div>
+          <p className="mt-3 text-xs text-amber-600">Aguardando QR Code ou pareamento</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Desconectadas</p>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-3xl font-semibold text-slate-700">{summary.disconnected}</span>
+            <WifiOff className="h-5 w-5 text-slate-400" />
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Disponíveis para reconexão</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: 'Todas', value: 'all' },
+            { label: 'Conectadas', value: 'connected' },
+            { label: 'Conectando', value: 'connecting' },
+            { label: 'Desconectadas', value: 'disconnected' },
+          ].map((filter) => (
+            <button
+              key={filter.value}
+              onClick={() => setFilterStatus(filter.value as typeof filterStatus)}
+              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                filterStatus === filter.value
+                  ? 'border-slate-800 bg-slate-900 text-white shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full max-w-xs">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Buscar por nome ou número"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          />
+        </div>
+      </div>
+
+      {filteredInstances.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 py-16 text-center shadow-inner">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900/90 text-white shadow-lg shadow-slate-900/20">
+            <MessageCircle className="h-7 w-7" />
+          </div>
+          <h3 className="mt-6 text-xl font-semibold text-slate-900">Nenhuma instância encontrada</h3>
+          <p className="mt-2 text-sm text-slate-500">
+            {instances.length === 0
+              ? 'Crie sua primeira instância para começar a enviar mensagens.'
+              : 'Ajuste os filtros ou busque por outro termo.'}
           </p>
           <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center space-x-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg transition-colors shadow-md hover:shadow-lg"
+            onClick={() => {
+              if (instances.length === 0) {
+                setShowCreateModal(true);
+              } else {
+                setFilterStatus('all');
+                setSearchTerm('');
+              }
+            }}
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow shadow-slate-800/30 transition hover:bg-slate-800"
           >
-            <Plus className="w-5 h-5" />
-            <span>Criar Instância</span>
+            <Plus className="h-4 w-4" />
+            {instances.length === 0 ? 'Criar instância agora' : 'Limpar filtros'}
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {instances.map((instance) => (
-            <div key={instance.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{instance.name}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{instance.phone_number || 'Sem número'}</p>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filteredInstances.map((instance) => (
+            <div
+              key={instance.id}
+              className="group flex h-full flex-col justify-between rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                    <Smartphone className="h-3.5 w-3.5" />
+                    Instância
                   </div>
-                  {getStatusBadge(instance.status)}
+                  <h3 className="text-lg font-semibold text-slate-900">{instance.name}</h3>
+                  <div className="text-sm text-slate-500">
+                    {instance.phone_number ? (
+                      <span className="inline-flex items-center gap-2">
+                        {instance.phone_number}
+                        <button
+                          onClick={() => handleCopyToken(instance.instance_token)}
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                          type="button"
+                        >
+                          Copiar token
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-slate-500">
+                        <Link className="h-4 w-4" />
+                        Sem número vinculado
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {getStatusBadge(instance.status)}
+              </div>
+
+              <div className="mt-6 space-y-3 text-sm text-slate-600">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Token da instância</p>
+                  <p className="mt-2 truncate font-mono text-xs text-slate-600">
+                    {instance.instance_token ?? '—'}
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   {instance.status === 'disconnected' && (
                     <button
                       onClick={() => openConnectModal(instance)}
-                      className="flex items-center space-x-1 px-3 py-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors text-sm"
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-100"
                     >
-                      <Power className="w-4 h-4" />
-                      <span>Conectar</span>
+                      <Power className="h-4 w-4" />
+                      Conectar
                     </button>
                   )}
 
@@ -549,17 +735,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     <>
                       <button
                         onClick={() => openConnectModal(instance)}
-                        className="flex items-center space-x-1 px-3 py-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors text-sm"
+                        className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-600 transition hover:bg-amber-100"
                       >
-                        <QrCode className="w-4 h-4" />
-                        <span>Ver QR Code</span>
+                        <QrCode className="h-4 w-4" />
+                        Ver QR/Pareamento
                       </button>
                       <button
                         onClick={() => handleCancelConnection(instance)}
-                        className="flex items-center space-x-1 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors text-sm"
+                        className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-100"
                       >
-                        <PowerOff className="w-4 h-4" />
-                        <span>Cancelar</span>
+                        <PowerOff className="h-4 w-4" />
+                        Cancelar
                       </button>
                     </>
                   )}
@@ -567,19 +753,19 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   {instance.status === 'connected' && (
                     <button
                       onClick={() => handleDisconnectInstance(instance)}
-                      className="flex items-center space-x-1 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors text-sm"
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-100"
                     >
-                      <PowerOff className="w-4 h-4" />
-                      <span>Desconectar</span>
+                      <PowerOff className="h-4 w-4" />
+                      Desconectar
                     </button>
                   )}
 
                   <button
                     onClick={() => handleDeleteInstance(instance)}
-                    className="flex items-center space-x-1 px-3 py-2 bg-gray-50 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Excluir</span>
+                    <Trash2 className="h-4 w-4" />
+                    Excluir
                   </button>
                 </div>
               </div>
