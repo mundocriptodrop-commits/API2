@@ -149,6 +149,25 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     }
   }, [user]);
 
+  function extractPhoneNumber(status: any): string | null {
+    // Tenta extrair do jid primeiro (formato: "554799967404:70@s.whatsapp.net")
+    const jid = status?.status?.jid;
+    if (jid && typeof jid === 'string') {
+      const match = jid.match(/^(\d+):/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    // Tenta usar o owner (número sem código do país)
+    const owner = status?.instance?.owner;
+    if (owner && typeof owner === 'string') {
+      return owner;
+    }
+
+    return null;
+  }
+
   async function loadInstances() {
     try {
       const { data, error } = await supabase
@@ -164,6 +183,42 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         const updatedInstance = data?.find(inst => inst.id === selectedInstance.id);
         if (updatedInstance) {
           setSelectedInstance(updatedInstance);
+        }
+      }
+
+      // Atualizar números de telefone para instâncias conectadas sem número
+      if (data) {
+        const instancesToUpdate = data.filter(
+          (inst) => inst.status === 'connected' && !inst.phone_number && inst.instance_token
+        );
+
+        for (const inst of instancesToUpdate) {
+          try {
+            const status = await whatsappApi.getInstanceStatus(inst.instance_token!);
+            const phoneNumber = extractPhoneNumber(status);
+
+            if (phoneNumber) {
+              await supabase
+                .from('whatsapp_instances')
+                .update({ phone_number: phoneNumber })
+                .eq('id', inst.id);
+            }
+          } catch (error) {
+            console.error(`Erro ao buscar número da instância ${inst.id}:`, error);
+          }
+        }
+
+        // Recarregar instâncias após atualizar números
+        if (instancesToUpdate.length > 0) {
+          const { data: updatedData } = await supabase
+            .from('whatsapp_instances')
+            .select('*')
+            .eq('user_id', user?.id || '')
+            .order('created_at', { ascending: false });
+
+          if (updatedData) {
+            setInstances(updatedData);
+          }
         }
       }
     } catch (error) {
@@ -317,6 +372,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         const isConnected = statusData?.loggedIn === true;
         const qrCodeFromApi = instanceData?.qrcode || status.qrCode;
         const pairingCodeFromApi = instanceData?.paircode || status.pairingCode;
+        const phoneNumber = extractPhoneNumber(status);
 
         if (isConnected) {
           await supabase
@@ -325,7 +381,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               status: 'connected',
               qr_code: null,
               pairing_code: null,
-              profile_data: status.profile || null,
+              phone_number: phoneNumber || instance.phone_number || null,
+              profile_data: status.profile || instanceData || null,
             })
             .eq('id', instance.id);
 

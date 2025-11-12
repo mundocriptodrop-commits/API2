@@ -35,18 +35,32 @@ export interface ConnectInstanceResponse {
 }
 
 export interface InstanceStatusResponse {
-  success: boolean;
-  status: 'disconnected' | 'connecting' | 'connected';
+  instance?: {
+    id?: string;
+    token?: string;
+    status?: string;
+    paircode?: string;
+    qrcode?: string;
+    name?: string;
+    profileName?: string;
+    profilePicUrl?: string;
+    owner?: string;
+    [key: string]: unknown;
+  };
+  status?: {
+    connected?: boolean;
+    jid?: string;
+    loggedIn?: boolean;
+    [key: string]: unknown;
+  };
+  // Compatibilidade com formato antigo
+  success?: boolean;
   qrCode?: string;
   pairingCode?: string;
   profile?: {
     name: string;
     phone: string;
     profilePicUrl?: string;
-  };
-  lastDisconnect?: {
-    reason: string;
-    timestamp: string;
   };
 }
 
