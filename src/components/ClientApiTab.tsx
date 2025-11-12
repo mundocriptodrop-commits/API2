@@ -1593,28 +1593,32 @@ export default function ClientApiTab() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-white">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 border-b border-indigo-500 px-5 py-3 shadow-xl">
-          <div className="flex items-center space-x-2 mb-1.5">
-            <span className={`px-2 py-0.5 rounded text-xs font-bold shadow-lg ${
-              currentEndpoint.color === 'cyan' ? 'bg-cyan-500 text-white' : 
-              currentEndpoint.color === 'green' ? 'bg-green-500 text-white' :
-              currentEndpoint.color === 'purple' ? 'bg-purple-500 text-white' :
-              currentEndpoint.color === 'indigo' ? 'bg-indigo-500 text-white' :
-              currentEndpoint.color === 'orange' ? 'bg-orange-500 text-white' : 'bg-gray-500 text-white'
-            }`}>
-              {currentEndpoint.method}
-                  </span>
-            <h1 className="text-base font-bold text-white/90">{currentEndpoint.path}</h1>
+        <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm">
+          <div className="px-8 py-6">
+            <div className="flex items-center gap-3 mb-3">
+              <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-semibold ${
+                currentEndpoint.color === 'cyan' ? 'bg-cyan-50 text-cyan-700 border border-cyan-200' : 
+                currentEndpoint.color === 'green' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                currentEndpoint.color === 'purple' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                currentEndpoint.color === 'indigo' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                currentEndpoint.color === 'orange' ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'bg-slate-50 text-slate-700 border border-slate-200'
+              }`}>
+                {currentEndpoint.method}
+              </span>
+              <code className="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-1 rounded-md border border-slate-200">
+                {currentEndpoint.path}
+              </code>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">{currentEndpoint.title}</h1>
+            <p className="text-slate-600 text-sm leading-relaxed max-w-3xl">{currentEndpoint.description}</p>
           </div>
-          <h2 className="text-xl font-bold text-white mb-1">{currentEndpoint.title}</h2>
-          <p className="text-blue-100 text-xs">{currentEndpoint.description}</p>
         </div>
 
         <div className="grid grid-cols-2 divide-x divide-slate-200">
           {/* Left Column - Documentation */}
-          <div className="p-8 space-y-6 bg-white">
+          <div className="p-8 space-y-8 bg-white">
             {/* Tokens Section */}
             {!loadingInstances && instances.length > 0 && (
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-lg">
@@ -1660,84 +1664,60 @@ export default function ClientApiTab() {
         </div>
       )}
 
-            {/* Authentication Section */}
-            <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-indigo-500/5" />
-              <div className="relative p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/25">
-                    <Zap className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900">Autenticação</h3>
-                    <p className="text-xs text-slate-500">Use o token da instância no header</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="rounded-xl border border-slate-200 bg-white/80 p-4 backdrop-blur">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Header</span>
-                      <span className="text-xs font-mono text-slate-400">token</span>
-                    </div>
-                    <code className="block text-xs font-mono text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                      seu_token_de_instancia
-                    </code>
-                  </div>
-                  
-                  <div className="flex items-start gap-2 rounded-lg bg-amber-50/50 border border-amber-200/50 p-3">
-                    <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-100">
-                      <span className="text-[10px] font-bold text-amber-600">!</span>
-                    </div>
-                    <p className="text-xs leading-relaxed text-amber-800">
-                      Token disponível apenas em instâncias conectadas
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Features */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-lg">
-              <h3 className="text-lg font-bold text-slate-800 mb-4">Recursos Específicos</h3>
-              <ul className="space-y-3">
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
+              <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
+                Recursos
+              </h3>
+              <ul className="space-y-2.5">
                 {currentEndpoint.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start space-x-3 text-sm text-slate-600">
-                    <span className="text-green-500 mt-0.5 text-lg">✓</span>
-                    <span>{feature}</span>
+                  <li key={idx} className="flex items-start gap-3 text-sm text-slate-700">
+                    <div className="mt-1.5 flex h-1.5 w-1.5 shrink-0 items-center justify-center rounded-full bg-blue-500"></div>
+                    <span className="leading-relaxed">{feature}</span>
                   </li>
                 ))}
               </ul>
-        </div>
+            </div>
 
             {/* Parameters */}
-          <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-4">Campos Comuns</h3>
-              <div className="space-y-3">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
+                Parâmetros
+              </h3>
+              <div className="space-y-4">
                 {currentEndpoint.params.map((param) => (
-                  <div key={param.name} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-2">
-                      <code className="text-sm font-mono font-bold text-blue-600">{param.name}</code>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{param.type}</span>
+                  <div key={param.name} className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                    <div className="flex items-start justify-between gap-4 mb-2">
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm font-mono font-semibold text-slate-900">{param.name}</code>
                         {param.required && (
-                          <span className="px-2.5 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">
-                            required
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-red-50 text-red-600 border border-red-200">
+                            obrigatório
+                          </span>
+                        )}
+                        {!param.required && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-600">
+                            opcional
                           </span>
                         )}
                       </div>
-              </div>
-                    <p className="text-sm text-slate-600">{param.description}</p>
-              </div>
+                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono text-slate-600 bg-slate-100 border border-slate-200">
+                        {param.type}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-600 leading-relaxed ml-0">{param.description}</p>
+                  </div>
                 ))}
+              </div>
             </div>
-          </div>
 
             {/* Example Response */}
-          <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${responseExamples.length > 1 ? 'bg-gradient-to-r from-emerald-500 to-green-500' : 'bg-green-500'}`}></div>
-                {responseExamples.length > 1 ? 'Respostas de Exemplo' : 'Resposta de Exemplo'}
+            <div>
+              <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
+                {responseExamples.length > 1 ? 'Respostas' : 'Resposta'}
               </h3>
               {responseExamples.length === 0 ? (
                 <div className="bg-slate-100 border border-slate-300 rounded-xl p-6 text-sm text-slate-600">
@@ -1831,28 +1811,34 @@ export default function ClientApiTab() {
           </div>
 
           {/* Right Column - Try It / Code */}
-          <div className="bg-slate-50">
+          <div className="bg-slate-50/50">
             {/* Tabs */}
-            <div className="flex border-b border-slate-200 bg-white">
+            <div className="sticky top-0 z-10 flex border-b border-slate-200 bg-white/95 backdrop-blur">
               <button
                 onClick={() => setActiveTab('try')}
-                className={`flex-1 px-6 py-4 text-sm font-bold transition-all ${
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all relative ${
                   activeTab === 'try'
-                    ? 'bg-white text-blue-600 border-b-3 border-blue-600 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    ? 'text-slate-900'
+                    : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 Try It
+                {activeTab === 'try' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+                )}
               </button>
               <button
                 onClick={() => setActiveTab('code')}
-                className={`flex-1 px-6 py-4 text-sm font-bold transition-all ${
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-all relative ${
                   activeTab === 'code'
-                    ? 'bg-white text-blue-600 border-b-3 border-blue-600 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    ? 'text-slate-900'
+                    : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 Code
+                {activeTab === 'code' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+                )}
               </button>
             </div>
 
