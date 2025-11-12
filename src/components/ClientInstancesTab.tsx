@@ -1,8 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { whatsappApi } from '../services/whatsapp';
-import { MessageCircle, Plus, Trash2, Power, PowerOff, QrCode, RefreshCw } from 'lucide-react';
+import {
+  MessageCircle,
+  Plus,
+  Trash2,
+  Power,
+  PowerOff,
+  QrCode,
+  RefreshCw,
+  Smartphone,
+  ShieldCheck,
+  Activity,
+  WifiOff,
+} from 'lucide-react';
 import type { Database } from '../lib/database.types';
 import ToastContainer, { type ToastMessage } from './ToastContainer';
 import ConfirmDialog from './ConfirmDialog';
@@ -43,6 +55,25 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     message: '',
     onConfirm: () => {},
   });
+
+  const summary = useMemo(() => {
+    const connected = instances.filter((instance) => instance.status === 'connected').length;
+    const connecting = instances.filter((instance) => instance.status === 'connecting').length;
+    const disconnected = instances.filter((instance) => instance.status === 'disconnected').length;
+    const limit = profile?.max_instances ?? 0;
+    const usagePercent = limit > 0 ? Math.min(100, Math.round((instances.length / limit) * 100)) : null;
+    const available = limit > 0 ? Math.max(0, limit - instances.length) : null;
+
+    return {
+      total: instances.length,
+      connected,
+      connecting,
+      disconnected,
+      limit,
+      available,
+      usagePercent,
+    };
+  }, [instances, profile]);
 
   useEffect(() => {
     if (openCreate) {
@@ -419,21 +450,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   }
 
   const getStatusBadge = (status: string) => {
-    const styles = {
-      connected: 'bg-green-100 text-green-700',
-      connecting: 'bg-yellow-100 text-yellow-700',
-      disconnected: 'bg-gray-100 text-gray-700',
-    };
+    const config = {
+      connected: {
+        label: 'Conectado',
+        classes: 'border border-emerald-200 bg-emerald-50 text-emerald-600',
+        icon: ShieldCheck,
+      },
+      connecting: {
+        label: 'Conectando',
+        classes: 'border border-amber-200 bg-amber-50 text-amber-600',
+        icon: RefreshCw,
+      },
+      disconnected: {
+        label: 'Desconectado',
+        classes: 'border border-slate-200 bg-slate-100 text-slate-500',
+        icon: WifiOff,
+      },
+    } as const;
 
-    const labels = {
-      connected: 'Conectado',
-      connecting: 'Conectando',
-      disconnected: 'Desconectado',
-    };
+    const badge = config[status as keyof typeof config] ?? config.disconnected;
+    const Icon = badge.icon;
 
     return (
-      <span className={`px-2 py-1 text-xs font-medium rounded-full ${styles[status as keyof typeof styles]}`}>
-        {labels[status as keyof typeof labels]}
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`}>
+        <Icon className="h-3.5 w-3.5" />
+        {badge.label}
       </span>
     );
   };
