@@ -2185,7 +2185,7 @@ export default function ClientApiTab() {
   return (
     <div className="flex h-full bg-white">
       {/* Sidebar */}
-      <div className="w-80 bg-slate-50 border-r border-slate-200 overflow-y-auto">
+      <div className="w-72 bg-slate-50 border-r border-slate-200 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 px-6 py-5">
           <h2 className="text-lg font-bold text-slate-900">API Reference</h2>
           <p className="text-xs text-slate-500 mt-1.5">
@@ -2234,10 +2234,10 @@ export default function ClientApiTab() {
                           }`}
                         >
                           <div className="flex-1 min-w-0">
-                            <div className={`text-sm font-medium truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                            <div className={`text-sm font-medium break-words ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                               {child.label}
                             </div>
-                            <div className={`text-xs font-mono mt-0.5 truncate ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                            <div className={`text-xs font-mono mt-0.5 break-words ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
                               {childData.path}
                             </div>
                           </div>
