@@ -403,10 +403,11 @@ async function handleRequest(request, env = {}, ctx) {
     });
   }
 
-  // Apenas POST permitido
-  if (request.method !== 'POST') {
+  // Aceita GET, POST, PUT, DELETE
+  const allowedMethods = ['GET', 'POST', 'PUT', 'DELETE'];
+  if (!allowedMethods.includes(request.method)) {
     return new Response(
-      JSON.stringify({ error: 'Method not allowed. Use POST.' }),
+      JSON.stringify({ error: `Method not allowed. Use ${allowedMethods.join(', ')}.` }),
       {
         status: 405,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -549,7 +550,15 @@ async function handleRequest(request, env = {}, ctx) {
     console.log(`[INFO] Processing endpoint - Original: ${url.pathname}, Processed: ${path}`);
     
     // Verifica se é um endpoint suportado
-    const supportedEndpoints = ['/send-text', '/send-media', '/send-menu', '/send-carousel', '/send-pix-button', '/send-status'];
+    const supportedEndpoints = [
+      // Envio de mensagens
+      '/send-text', '/send-media', '/send-menu', '/send-carousel', '/send-pix-button', '/send-status',
+      // Perfil
+      '/profile/name', '/profile/image',
+      // Instância
+      '/instance/connect', '/instance/disconnect', '/instance/status', '/instance/updateInstanceName', 
+      '/instance', '/instance/privacy', '/instance/presence'
+    ];
     if (!supportedEndpoints.includes(path)) {
       console.warn(`[WARN] Unsupported endpoint requested: ${path} (Original: ${url.pathname})`);
       return new Response(
@@ -568,43 +577,51 @@ async function handleRequest(request, env = {}, ctx) {
       );
     }
 
-    // Lê o body da requisição
-    const body = await request.text();
-
-    // Valida body JSON básico
-    let bodyData;
-    try {
-      bodyData = JSON.parse(body);
-    } catch (e) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // Lê o body da requisição apenas para métodos que podem ter body
+    let body = '';
+    let bodyData = {};
+    
+    if (request.method === 'POST' || request.method === 'PUT') {
+      body = await request.text();
+      
+      // Valida body JSON básico apenas se houver body
+      if (body && body.trim()) {
+        try {
+          bodyData = JSON.parse(body);
+        } catch (e) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid JSON in request body' }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
         }
-      );
-    }
-
-    // Valida campos obrigatórios para send-text
-    if (path === '/send-text' || path === '/functions/v1/send-text') {
-      if (!bodyData.number || !bodyData.text) {
-        return new Response(
-          JSON.stringify({
-            error: "Fields 'number' and 'text' are required",
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
       }
     }
 
-    // Valida campos obrigatórios para send-media
-    // Suporta múltiplos formatos de path: /send-media, /functions/v1/send-media, /whatsapp/send-media
-    if (path === '/send-media' || path.endsWith('/send-media')) {
-      if (!bodyData.number) {
-        return new Response(
+    // Valida campos obrigatórios apenas para métodos POST/PUT
+    if (request.method === 'POST' || request.method === 'PUT') {
+      // Valida campos obrigatórios para send-text
+      if (path === '/send-text' || path === '/functions/v1/send-text') {
+        if (!bodyData.number || !bodyData.text) {
+          return new Response(
+            JSON.stringify({
+              error: "Fields 'number' and 'text' are required",
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      }
+
+      // Valida campos obrigatórios para send-media
+      // Suporta múltiplos formatos de path: /send-media, /functions/v1/send-media, /whatsapp/send-media
+      if (path === '/send-media' || path.endsWith('/send-media')) {
+        if (!bodyData.number) {
+          return new Response(
           JSON.stringify({
             error: "Field 'number' is required",
           }),
@@ -625,8 +642,8 @@ async function handleRequest(request, env = {}, ctx) {
           }
         );
       }
-      if (!bodyData.file) {
-        return new Response(
+        if (!bodyData.file) {
+          return new Response(
           JSON.stringify({
             error: "Field 'file' is required (URL or base64)",
           }),
@@ -651,10 +668,10 @@ async function handleRequest(request, env = {}, ctx) {
       }
     }
 
-    // Valida campos obrigatórios para send-menu
-    if (path === '/send-menu' || path.endsWith('/send-menu')) {
-      if (!bodyData.number) {
-        return new Response(
+      // Valida campos obrigatórios para send-menu
+      if (path === '/send-menu' || path.endsWith('/send-menu')) {
+        if (!bodyData.number) {
+          return new Response(
           JSON.stringify({
             error: "Field 'number' is required",
           }),
@@ -675,8 +692,8 @@ async function handleRequest(request, env = {}, ctx) {
           }
         );
       }
-      if (!bodyData.text) {
-        return new Response(
+        if (!bodyData.text) {
+          return new Response(
           JSON.stringify({
             error: "Field 'text' is required",
           }),
@@ -699,10 +716,10 @@ async function handleRequest(request, env = {}, ctx) {
       }
     }
 
-    // Valida campos obrigatórios para send-carousel
-    if (path === '/send-carousel' || path.endsWith('/send-carousel')) {
-      if (!bodyData.number) {
-        return new Response(
+      // Valida campos obrigatórios para send-carousel
+      if (path === '/send-carousel' || path.endsWith('/send-carousel')) {
+        if (!bodyData.number) {
+          return new Response(
           JSON.stringify({
             error: "Field 'number' is required",
           }),
@@ -712,8 +729,8 @@ async function handleRequest(request, env = {}, ctx) {
           }
         );
       }
-      if (!bodyData.text) {
-        return new Response(
+        if (!bodyData.text) {
+          return new Response(
           JSON.stringify({
             error: "Field 'text' is required",
           }),
@@ -736,10 +753,10 @@ async function handleRequest(request, env = {}, ctx) {
       }
     }
 
-    // Valida campos obrigatórios para send-pix-button
-    if (path === '/send-pix-button' || path.endsWith('/send-pix-button')) {
-      if (!bodyData.number) {
-        return new Response(
+      // Valida campos obrigatórios para send-pix-button
+      if (path === '/send-pix-button' || path.endsWith('/send-pix-button')) {
+        if (!bodyData.number) {
+          return new Response(
           JSON.stringify({
             error: "Field 'number' is required",
           }),
@@ -773,10 +790,10 @@ async function handleRequest(request, env = {}, ctx) {
       }
     }
 
-    // Valida campos obrigatórios para send-status
-    if (path === '/send-status' || path.endsWith('/send-status')) {
-      if (!bodyData.type) {
-        return new Response(
+      // Valida campos obrigatórios para send-status
+      if (path === '/send-status' || path.endsWith('/send-status')) {
+        if (!bodyData.type) {
+          return new Response(
           JSON.stringify({
             error: "Field 'type' is required (text, image, video, audio)",
           }),
@@ -809,6 +826,7 @@ async function handleRequest(request, env = {}, ctx) {
         );
       }
     }
+    }
 
     // Faz proxy para Edge Function do Supabase
     // Normaliza o path para garantir que está correto
@@ -831,17 +849,31 @@ async function handleRequest(request, env = {}, ctx) {
       console.log(`[DEBUG] Proxying to Edge Function: ${edgeFunctionUrl}`);
     }
     
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'token': token, // Passa o token para a Edge Function
-        'X-Instance-ID': validation.instance.id, // ID da instância validada
-        'X-User-ID': validation.instance.user_id, // ID do usuário
-      },
-      body: JSON.stringify(bodyData),
-    });
+    // Prepara headers e body baseado no método HTTP
+    const fetchHeaders = {
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'token': token, // Passa o token para a Edge Function
+      'X-Instance-ID': validation.instance.id, // ID da instância validada
+      'X-User-ID': validation.instance.user_id, // ID do usuário
+    };
+    
+    // Adiciona Content-Type apenas para métodos que podem ter body
+    if (request.method === 'POST' || request.method === 'PUT') {
+      fetchHeaders['Content-Type'] = 'application/json';
+    }
+    
+    // Prepara body apenas para métodos que podem ter body
+    const fetchOptions = {
+      method: request.method, // Passa o método HTTP original (GET, POST, PUT, DELETE)
+      headers: fetchHeaders,
+    };
+    
+    // Adiciona body apenas se houver dados e o método permitir
+    if ((request.method === 'POST' || request.method === 'PUT') && Object.keys(bodyData).length > 0) {
+      fetchOptions.body = JSON.stringify(bodyData);
+    }
+    
+    const response = await fetch(edgeFunctionUrl, fetchOptions);
     
     const latencyMs = Date.now() - requestStartTimestamp;
     

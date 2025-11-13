@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Check, ChevronRight, ArrowRight, Send, Image, Smartphone, Zap, Plus, Trash2 } from 'lucide-react';
+import { Copy, Check, ChevronRight, Send, Image, Smartphone, Zap, Plus, Trash2, User, Settings, Power, PowerOff, Eye, Lock } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,9 @@ declare global {
     readonly VITE_SUPABASE_ANON_KEY?: string;
     readonly VITE_SUPABASE_URL?: string;
     readonly VITE_PUBLIC_API_URL?: string;
+  }
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
   }
 }
 
@@ -23,7 +26,10 @@ interface WhatsAppInstance {
   phone_number: string | null;
 }
 
-type EndpointType = 'send-text' | 'send-media' | 'send-menu' | 'send-carousel' | 'send-pix-button' | 'send-status';
+type EndpointType = 
+  | 'send-text' | 'send-media' | 'send-menu' | 'send-carousel' | 'send-pix-button' | 'send-status'
+  | 'profile-name' | 'profile-image'
+  | 'instance-connect' | 'instance-disconnect' | 'instance-status' | 'instance-update-name' | 'instance-delete' | 'instance-privacy-get' | 'instance-privacy-set' | 'instance-presence';
 
 type EndpointParam = {
   name: string;
@@ -190,6 +196,22 @@ export default function ClientApiTab() {
   const [statusFile, setStatusFile] = useState('');
   const [thumbnail, setThumbnail] = useState('');
 
+  // Estados para profile
+  const [profileName, setProfileName] = useState('Minha Empresa - Atendimento');
+  const [profileImage, setProfileImage] = useState('https://picsum.photos/640/640.jpg');
+
+  // Estados para instance
+  const [instancePhone, setInstancePhone] = useState('5511999999999');
+  const [instanceName, setInstanceName] = useState('Minha Nova Instância 2024!@#');
+  const [privacyGroupadd, setPrivacyGroupadd] = useState('contacts');
+  const [privacyLast, setPrivacyLast] = useState('none');
+  const [privacyStatus, setPrivacyStatus] = useState('contacts');
+  const [privacyProfile, setPrivacyProfile] = useState('');
+  const [privacyReadreceipts, setPrivacyReadreceipts] = useState('');
+  const [privacyOnline, setPrivacyOnline] = useState('');
+  const [privacyCalladd, setPrivacyCalladd] = useState('');
+  const [presenceValue, setPresenceValue] = useState('available');
+
   const [expandedResponses, setExpandedResponses] = useState<Record<string, boolean>>({});
   
   const [testResponse, setTestResponse] = useState<string>('');
@@ -239,12 +261,12 @@ export default function ClientApiTab() {
   };
 
   const handleAddMenuButton = () => {
-    setMenuButtons((prev) => [...prev, createMenuButton({ label: `Botão ${prev.length + 1}` })]);
+    setMenuButtons((prev: MenuButtonConfig[]) => [...prev, createMenuButton({ label: `Botão ${prev.length + 1}` })]);
   };
 
   const handleUpdateMenuButton = (buttonId: string, updates: Partial<MenuButtonConfig>) => {
-    setMenuButtons((prev) =>
-      prev.map((button) =>
+    setMenuButtons((prev: MenuButtonConfig[]) =>
+      prev.map((button: MenuButtonConfig) =>
         button.id === buttonId
           ? {
               ...button,
@@ -258,19 +280,19 @@ export default function ClientApiTab() {
   };
 
   const handleRemoveMenuButton = (buttonId: string) => {
-    setMenuButtons((prev) => {
+    setMenuButtons((prev: MenuButtonConfig[]) => {
       if (prev.length === 1) return prev;
-      return prev.filter((button) => button.id !== buttonId);
+      return prev.filter((button: MenuButtonConfig) => button.id !== buttonId);
     });
   };
 
   const handleAddMenuListSection = () => {
-    setMenuListSections((prev) => [...prev, createMenuListSection({ title: `Seção ${prev.length + 1}` })]);
+    setMenuListSections((prev: MenuListSection[]) => [...prev, createMenuListSection({ title: `Seção ${prev.length + 1}` })]);
   };
 
   const handleUpdateMenuListSection = (sectionId: string, updates: Partial<MenuListSection>) => {
-    setMenuListSections((prev) =>
-      prev.map((section) =>
+    setMenuListSections((prev: MenuListSection[]) =>
+      prev.map((section: MenuListSection) =>
         section.id === sectionId
           ? {
               ...section,
@@ -283,15 +305,15 @@ export default function ClientApiTab() {
   };
 
   const handleRemoveMenuListSection = (sectionId: string) => {
-    setMenuListSections((prev) => {
+    setMenuListSections((prev: MenuListSection[]) => {
       if (prev.length === 1) return prev;
-      return prev.filter((section) => section.id !== sectionId);
+      return prev.filter((section: MenuListSection) => section.id !== sectionId);
     });
   };
 
   const handleAddMenuListItem = (sectionId: string) => {
-    setMenuListSections((prev) =>
-      prev.map((section) =>
+    setMenuListSections((prev: MenuListSection[]) =>
+      prev.map((section: MenuListSection) =>
         section.id === sectionId
           ? {
               ...section,
@@ -303,12 +325,12 @@ export default function ClientApiTab() {
   };
 
   const handleUpdateMenuListItem = (sectionId: string, itemId: string, updates: Partial<MenuListItem>) => {
-    setMenuListSections((prev) =>
-      prev.map((section) =>
+    setMenuListSections((prev: MenuListSection[]) =>
+      prev.map((section: MenuListSection) =>
         section.id === sectionId
           ? {
               ...section,
-              items: section.items.map((item) =>
+              items: section.items.map((item: MenuListItem) =>
                 item.id === itemId
                   ? {
                       ...item,
@@ -323,12 +345,12 @@ export default function ClientApiTab() {
   };
 
   const handleRemoveMenuListItem = (sectionId: string, itemId: string) => {
-    setMenuListSections((prev) =>
-      prev.map((section) =>
+    setMenuListSections((prev: MenuListSection[]) =>
+      prev.map((section: MenuListSection) =>
         section.id === sectionId
           ? {
               ...section,
-              items: section.items.length === 1 ? section.items : section.items.filter((item) => item.id !== itemId),
+              items: section.items.length === 1 ? section.items : section.items.filter((item: MenuListItem) => item.id !== itemId),
             }
           : section
       )
@@ -336,12 +358,12 @@ export default function ClientApiTab() {
   };
 
   const handleAddMenuPollOption = () => {
-    setMenuPollOptions((prev) => [...prev, createMenuPollOption({ label: `Opção ${prev.length + 1}` })]);
+    setMenuPollOptions((prev: MenuPollOption[]) => [...prev, createMenuPollOption({ label: `Opção ${prev.length + 1}` })]);
   };
 
   const handleUpdateMenuPollOption = (optionId: string, label: string) => {
-    setMenuPollOptions((prev) =>
-      prev.map((option) =>
+    setMenuPollOptions((prev: MenuPollOption[]) =>
+      prev.map((option: MenuPollOption) =>
         option.id === optionId
           ? {
               ...option,
@@ -353,22 +375,22 @@ export default function ClientApiTab() {
   };
 
   const handleRemoveMenuPollOption = (optionId: string) => {
-    setMenuPollOptions((prev) => {
+    setMenuPollOptions((prev: MenuPollOption[]) => {
       if (prev.length <= 2) return prev;
-      return prev.filter((option) => option.id !== optionId);
+      return prev.filter((option: MenuPollOption) => option.id !== optionId);
     });
   };
 
   const handleAddMenuCarouselCard = () => {
-    setMenuCarouselCards((prev) => [
+    setMenuCarouselCards((prev: MenuCarouselCard[]) => [
       ...prev,
       createMenuCarouselCard({ title: `Cartão ${prev.length + 1}`, buttons: [createMenuButton()] }),
     ]);
   };
 
   const handleUpdateMenuCarouselCard = (cardId: string, updates: Partial<MenuCarouselCard>) => {
-    setMenuCarouselCards((prev) =>
-      prev.map((card) =>
+    setMenuCarouselCards((prev: MenuCarouselCard[]) =>
+      prev.map((card: MenuCarouselCard) =>
         card.id === cardId
           ? {
               ...card,
@@ -381,15 +403,15 @@ export default function ClientApiTab() {
   };
 
   const handleRemoveMenuCarouselCard = (cardId: string) => {
-    setMenuCarouselCards((prev) => {
+    setMenuCarouselCards((prev: MenuCarouselCard[]) => {
       if (prev.length === 1) return prev;
-      return prev.filter((card) => card.id !== cardId);
+      return prev.filter((card: MenuCarouselCard) => card.id !== cardId);
     });
   };
 
   const handleAddButtonToCarouselCard = (cardId: string) => {
-    setMenuCarouselCards((prev) =>
-      prev.map((card) =>
+    setMenuCarouselCards((prev: MenuCarouselCard[]) =>
+      prev.map((card: MenuCarouselCard) =>
         card.id === cardId
           ? {
               ...card,
@@ -401,12 +423,12 @@ export default function ClientApiTab() {
   };
 
   const handleUpdateCarouselButton = (cardId: string, buttonId: string, updates: Partial<MenuButtonConfig>) => {
-    setMenuCarouselCards((prev) =>
-      prev.map((card) =>
+    setMenuCarouselCards((prev: MenuCarouselCard[]) =>
+      prev.map((card: MenuCarouselCard) =>
         card.id === cardId
           ? {
               ...card,
-              buttons: card.buttons.map((button) =>
+              buttons: card.buttons.map((button: MenuButtonConfig) =>
                 button.id === buttonId
                   ? {
                       ...button,
@@ -423,12 +445,12 @@ export default function ClientApiTab() {
   };
 
   const handleRemoveCarouselButton = (cardId: string, buttonId: string) => {
-    setMenuCarouselCards((prev) =>
-      prev.map((card) =>
+    setMenuCarouselCards((prev: MenuCarouselCard[]) =>
+      prev.map((card: MenuCarouselCard) =>
         card.id === cardId
           ? {
               ...card,
-              buttons: card.buttons.length === 1 ? card.buttons : card.buttons.filter((button) => button.id !== buttonId),
+              buttons: card.buttons.length === 1 ? card.buttons : card.buttons.filter((button: MenuButtonConfig) => button.id !== buttonId),
             }
           : card
       )
@@ -442,12 +464,14 @@ export default function ClientApiTab() {
   }, [user]);
 
   const fetchInstances = async () => {
+    if (!user || !user.id) return;
     try {
       setLoadingInstances(true);
+      const userId = user.id;
       const { data, error } = await supabase
         .from('whatsapp_instances')
         .select('id, name, instance_token, status, phone_number')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -493,7 +517,7 @@ export default function ClientApiTab() {
         const choices: string[] = [];
 
         if (menuType === 'button') {
-          menuButtons.forEach((button) => {
+          menuButtons.forEach((button: MenuButtonConfig) => {
             const label = button.label.trim();
             if (!label) return;
 
@@ -539,12 +563,12 @@ export default function ClientApiTab() {
         }
 
         if (menuType === 'list') {
-          menuListSections.forEach((section) => {
+          menuListSections.forEach((section: MenuListSection) => {
             const title = section.title.trim();
             if (title) {
               choices.push(`[${title}]`);
             }
-            section.items.forEach((item) => {
+            section.items.forEach((item: MenuListItem) => {
               const label = item.label.trim();
               if (!label) return;
               const parts = [label];
@@ -567,7 +591,7 @@ export default function ClientApiTab() {
         }
 
         if (menuType === 'poll') {
-          menuPollOptions.forEach((option) => {
+          menuPollOptions.forEach((option: MenuPollOption) => {
             const label = option.label.trim();
             if (!label) return;
             choices.push(label);
@@ -576,7 +600,7 @@ export default function ClientApiTab() {
         }
 
         if (menuType === 'carousel') {
-          menuCarouselCards.forEach((card) => {
+          menuCarouselCards.forEach((card: MenuCarouselCard) => {
             const title = card.title.trim();
             const subtitle = card.subtitle?.trim();
             if (title) {
@@ -587,7 +611,7 @@ export default function ClientApiTab() {
             if (image) {
               choices.push(`{${image}}`);
             }
-            card.buttons.forEach((button) => {
+            card.buttons.forEach((button: MenuButtonConfig) => {
               const label = button.label.trim();
               if (!label) return;
 
@@ -675,6 +699,45 @@ export default function ClientApiTab() {
           ...(testMessage ? { text: testMessage } : {}),
           ...(thumbnail && statusType === 'video' ? { thumbnail } : {}),
         };
+      case 'profile-name':
+        return {
+          name: profileName,
+        };
+      case 'profile-image':
+        return {
+          image: profileImage,
+        };
+      case 'instance-connect':
+        return {
+          ...(instancePhone ? { phone: instancePhone } : {}),
+        };
+      case 'instance-disconnect':
+        return {};
+      case 'instance-status':
+        return {};
+      case 'instance-update-name':
+        return {
+          name: instanceName,
+        };
+      case 'instance-delete':
+        return {};
+      case 'instance-privacy-get':
+        return {};
+      case 'instance-privacy-set': {
+        const payload: Record<string, unknown> = {};
+        if (privacyGroupadd && privacyGroupadd.trim()) payload.groupadd = privacyGroupadd;
+        if (privacyLast && privacyLast.trim()) payload.last = privacyLast;
+        if (privacyStatus && privacyStatus.trim()) payload.status = privacyStatus;
+        if (privacyProfile && privacyProfile.trim()) payload.profile = privacyProfile;
+        if (privacyReadreceipts && privacyReadreceipts.trim()) payload.readreceipts = privacyReadreceipts;
+        if (privacyOnline && privacyOnline.trim()) payload.online = privacyOnline;
+        if (privacyCalladd && privacyCalladd.trim()) payload.calladd = privacyCalladd;
+        return payload;
+      }
+      case 'instance-presence':
+        return {
+          presence: presenceValue,
+        };
       default:
         return {};
     }
@@ -691,21 +754,32 @@ export default function ClientApiTab() {
 
     try {
       const body = buildRequestPayload();
+      const method = currentEndpoint.method;
 
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         token: testToken,
       };
+
+      // Adiciona Content-Type apenas para métodos que enviam body
+      if (method !== 'GET' && method !== 'DELETE') {
+        headers['Content-Type'] = 'application/json';
+      }
 
       if (requiresSupabaseAuth && SUPABASE_ANON_KEY) {
         headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
       }
 
-      const response = await fetch(buildEndpointUrl(currentEndpoint.path), {
-        method: 'POST',
+      const fetchOptions: RequestInit = {
+        method,
         headers,
-        body: JSON.stringify(body),
-      });
+      };
+
+      // Adiciona body apenas para métodos que suportam
+      if (method !== 'GET' && method !== 'DELETE' && Object.keys(body).length > 0) {
+        fetchOptions.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(buildEndpointUrl(currentEndpoint.path), fetchOptions);
 
       const data = await response.json();
       setTestResponse(JSON.stringify(data, null, 2));
@@ -728,15 +802,27 @@ export default function ClientApiTab() {
     },
     {
       id: 'instancia' as const,
-      label: 'Instancia',
-      count: 0,
-      children: []
+      label: 'Instância',
+      count: 8,
+      children: [
+        { id: 'instance-connect' as EndpointType, label: 'Conectar instância ao WhatsApp', method: 'POST' },
+        { id: 'instance-disconnect' as EndpointType, label: 'Desconectar instância', method: 'POST' },
+        { id: 'instance-status' as EndpointType, label: 'Verificar status da instância', method: 'GET' },
+        { id: 'instance-update-name' as EndpointType, label: 'Atualizar nome da instância', method: 'POST' },
+        { id: 'instance-delete' as EndpointType, label: 'Deletar instância', method: 'DELETE' },
+        { id: 'instance-privacy-get' as EndpointType, label: 'Buscar configurações de privacidade', method: 'GET' },
+        { id: 'instance-privacy-set' as EndpointType, label: 'Alterar configurações de privacidade', method: 'POST' },
+        { id: 'instance-presence' as EndpointType, label: 'Atualizar status de presença', method: 'POST' },
+      ]
     },
     {
       id: 'perfil' as const,
       label: 'Perfil',
-      count: 0,
-      children: []
+      count: 2,
+      children: [
+        { id: 'profile-name' as EndpointType, label: 'Alterar nome do perfil', method: 'POST' },
+        { id: 'profile-image' as EndpointType, label: 'Alterar imagem do perfil', method: 'POST' },
+      ]
     },
     {
       id: 'enviar-mensagem' as const,
@@ -1419,10 +1505,590 @@ export default function ClientApiTab() {
           }
         }
       ]
+    },
+    'profile-name': {
+      title: 'Alterar nome do perfil',
+      description: 'Altera o nome de exibição do perfil da instância do WhatsApp. A instância deve estar conectada ao WhatsApp.',
+      method: 'POST',
+      path: '/profile/name',
+      icon: User,
+      color: 'blue',
+      features: [
+        'Atualiza o nome do perfil usando o WhatsApp AppState',
+        'Sincroniza a mudança com o servidor do WhatsApp',
+        'Retorna confirmação da alteração'
+      ],
+      params: [
+        { name: 'name', type: 'string', required: true, description: 'Novo nome do perfil do WhatsApp. Será visível para todos os contatos.' }
+      ],
+      exampleRequest: {
+        name: "Minha Empresa - Atendimento"
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Nome do perfil alterado com sucesso",
+          body: {
+            success: true,
+            message: "Nome do perfil alterado com sucesso",
+            profile: {
+              name: "Minha Empresa - Atendimento",
+              updated_at: 1704067200
+            }
+          }
+        },
+        {
+          status: 400,
+          label: "Dados inválidos na requisição",
+          body: {
+            error: "Invalid name"
+          }
+        },
+        {
+          status: 401,
+          label: "Sem sessão ativa",
+          body: {
+            error: "No session"
+          }
+        },
+        {
+          status: 403,
+          label: "Ação não permitida",
+          body: {
+            error: "Action not allowed"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Erro ao alterar nome do perfil"
+          }
+        }
+      ]
+    },
+    'profile-image': {
+      title: 'Alterar imagem do perfil',
+      description: 'Altera a imagem de perfil da instância do WhatsApp. A imagem deve estar em formato JPEG e tamanho 640x640 pixels.',
+      method: 'POST',
+      path: '/profile/image',
+      icon: Image,
+      color: 'purple',
+      features: [
+        'Atualiza a imagem do perfil',
+        'Suporte para URL, base64 ou remoção',
+        'Sincroniza a mudança com o servidor do WhatsApp',
+        'Retorna confirmação da alteração'
+      ],
+      params: [
+        { name: 'image', type: 'string', required: true, description: 'Imagem do perfil. Pode ser: URL da imagem (http/https), string base64 da imagem, ou "remove"/"delete" para remover a imagem atual. Recomendado: JPEG 640x640 pixels.' }
+      ],
+      exampleRequest: {
+        image: "https://picsum.photos/640/640.jpg"
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Imagem do perfil alterada com sucesso",
+          body: {
+            success: true,
+            message: "Imagem do perfil alterada com sucesso",
+            profile: {
+              image_updated: true,
+              image_removed: false,
+              updated_at: 1704067200
+            }
+          }
+        },
+        {
+          status: 400,
+          label: "Dados inválidos na requisição",
+          body: {
+            error: "Invalid image format"
+          }
+        },
+        {
+          status: 401,
+          label: "Sem sessão ativa",
+          body: {
+            error: "No session"
+          }
+        },
+        {
+          status: 403,
+          label: "Ação não permitida",
+          body: {
+            error: "Action not allowed"
+          }
+        },
+        {
+          status: 413,
+          label: "Imagem muito grande",
+          body: {
+            error: "Image too large"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Erro ao alterar imagem do perfil"
+          }
+        }
+      ]
+    },
+    'instance-connect': {
+      title: 'Conectar instância ao WhatsApp',
+      description: 'Inicia o processo de conexão de uma instância ao WhatsApp. Gera QR code ou código de pareamento dependendo se o número de telefone é fornecido.',
+      method: 'POST',
+      path: '/instance/connect',
+      icon: Power,
+      color: 'green',
+      features: [
+        'Gera QR code para conexão (sem telefone)',
+        'Gera código de pareamento (com telefone)',
+        'Atualiza status da instância para "connecting"',
+        'Timeout de 2 minutos para QRCode ou 5 minutos para pareamento'
+      ],
+      params: [
+        { name: 'phone', type: 'string', required: false, description: 'Número de telefone no formato internacional (ex: 5511999999999). Se não fornecido, será gerado QR code. Se fornecido, será gerado código de pareamento.' }
+      ],
+      exampleRequest: {
+        phone: "5511999999999"
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Sucesso",
+          body: {
+            connected: false,
+            loggedIn: false,
+            jid: null,
+            instance: {
+              id: "i91011ijkl",
+              token: "abc123xyz",
+              status: "connecting",
+              paircode: "1234-5678",
+              qrcode: "data:image/png;base64,iVBORw0KGg...",
+              name: "Instância Principal",
+              profileName: "Loja ABC",
+              profilePicUrl: "https://example.com/profile.jpg",
+              isBusiness: true,
+              plataform: "Android",
+              systemName: "uazapi",
+              owner: "user@example.com"
+            }
+          }
+        },
+        {
+          status: 401,
+          label: "Token inválido/expirado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 404,
+          label: "Instância não encontrada",
+          body: {
+            error: "Instance not found"
+          }
+        },
+        {
+          status: 429,
+          label: "Limite de conexões simultâneas atingido",
+          body: {
+            error: "Too many connections"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno",
+          body: {
+            error: "Internal server error"
+          }
+        }
+      ]
+    },
+    'instance-disconnect': {
+      title: 'Desconectar instância',
+      description: 'Desconecta a instância do WhatsApp, encerrando a sessão atual. Após desconectar, será necessário novo QR code para reconectar.',
+      method: 'POST',
+      path: '/instance/disconnect',
+      icon: PowerOff,
+      color: 'red',
+      features: [
+        'Encerra a conexão ativa',
+        'Requer novo QR code para reconectar',
+        'Limpa credenciais da instância',
+        'Reinicia o processo de conexão'
+      ],
+      params: [],
+      exampleRequest: {},
+      responses: [
+        {
+          status: 200,
+          label: "Instância desconectada com sucesso",
+          body: {
+            success: true,
+            message: "Instance disconnected"
+          }
+        },
+        {
+          status: 401,
+          label: "Token inválido/expirado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 404,
+          label: "Instância não encontrada",
+          body: {
+            error: "Instance not found"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno",
+          body: {
+            error: "Internal server error"
+          }
+        }
+      ]
+    },
+    'instance-status': {
+      title: 'Verificar status da instância',
+      description: 'Retorna o status atual de uma instância, incluindo estado da conexão, QR code, código de pareamento e detalhes completos da instância.',
+      method: 'GET',
+      path: '/instance/status',
+      icon: Eye,
+      color: 'blue',
+      features: [
+        'Monitora o progresso da conexão',
+        'Obtém QR codes atualizados',
+        'Verifica estado atual da instância',
+        'Identifica problemas de conexão'
+      ],
+      params: [],
+      exampleRequest: {},
+      responses: [
+        {
+          status: 200,
+          label: "Sucesso",
+          body: {
+            instance: {
+              id: "i91011ijkl",
+              token: "abc123xyz",
+              status: "connected",
+              paircode: "1234-5678",
+              qrcode: "",
+              name: "Instância Principal",
+              profileName: "Loja ABC",
+              profilePicUrl: "https://example.com/profile.jpg",
+              isBusiness: true,
+              plataform: "Android",
+              systemName: "uazapi",
+              owner: "user@example.com",
+              lastDisconnect: "2025-01-24T14:00:00Z",
+              lastDisconnectReason: "Network error"
+            },
+            status: {
+              connected: true,
+              loggedIn: true,
+              jid: "5511999999999:70@s.whatsapp.net"
+            }
+          }
+        },
+        {
+          status: 401,
+          label: "Token inválido/expirado",
+          body: {
+            error: "instance info not found"
+          }
+        },
+        {
+          status: 404,
+          label: "Instância não encontrada",
+          body: {
+            error: "Instance not found"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno",
+          body: {
+            error: "Internal server error"
+          }
+        }
+      ]
+    },
+    'instance-update-name': {
+      title: 'Atualizar nome da instância',
+      description: 'Atualiza o nome de uma instância WhatsApp existente. O nome não precisa ser único.',
+      method: 'POST',
+      path: '/instance/updateInstanceName',
+      icon: Settings,
+      color: 'indigo',
+      features: [
+        'Atualiza o nome da instância',
+        'Nome não precisa ser único',
+        'Retorna dados atualizados da instância'
+      ],
+      params: [
+        { name: 'name', type: 'string', required: true, description: 'Novo nome para a instância' }
+      ],
+      exampleRequest: {
+        name: "Minha Nova Instância 2024!@#"
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Sucesso",
+          body: {
+            id: "i91011ijkl",
+            token: "abc123xyz",
+            status: "connected",
+            name: "Minha Nova Instância 2024!@#",
+            profileName: "Loja ABC",
+            profilePicUrl: "https://example.com/profile.jpg",
+            isBusiness: true,
+            plataform: "Android",
+            systemName: "uazapi",
+            owner: "user@example.com"
+          }
+        },
+        {
+          status: 401,
+          label: "Token inválido/expirado",
+          body: {
+            error: "Invalid token"
+          }
+        },
+        {
+          status: 404,
+          label: "Instância não encontrada",
+          body: {
+            error: "Instance not found"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno",
+          body: {
+            error: "Internal server error"
+          }
+        }
+      ]
+    },
+    'instance-delete': {
+      title: 'Deletar instância',
+      description: 'Remove a instância do sistema permanentemente. Esta ação não pode ser desfeita.',
+      method: 'DELETE',
+      path: '/instance',
+      icon: Trash2,
+      color: 'red',
+      features: [
+        'Remove a instância permanentemente',
+        'Desconecta o dispositivo',
+        'Remove do banco de dados',
+        'Ação irreversível'
+      ],
+      params: [],
+      exampleRequest: {},
+      responses: [
+        {
+          status: 200,
+          label: "Instância deletada com sucesso",
+          body: {
+            response: "Instance Deleted",
+            info: "O dispositivo foi desconectado com sucesso e a instância foi removida do banco de dados."
+          }
+        },
+        {
+          status: 401,
+          label: "Falha na autenticação",
+          body: {
+            error: "Não autorizado - Token inválido ou ausente"
+          }
+        },
+        {
+          status: 404,
+          label: "Instância não encontrada",
+          body: {
+            error: "Instância não encontrada"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "Falha ao deletar instância"
+          }
+        }
+      ]
+    },
+    'instance-privacy-get': {
+      title: 'Buscar configurações de privacidade',
+      description: 'Busca as configurações de privacidade atuais da instância do WhatsApp. Retorna todas as configurações como quem pode adicionar aos grupos, ver visto por último, ver status, etc.',
+      method: 'GET',
+      path: '/instance/privacy',
+      icon: Lock,
+      color: 'blue',
+      features: [
+        'Retorna todas as configurações de privacidade',
+        'Inclui: grupos, visto por último, status, foto, leitura, online, chamadas',
+        'Configurações de broadcast não disponíveis via API'
+      ],
+      params: [],
+      exampleRequest: {},
+      responses: [
+        {
+          status: 200,
+          label: "Configurações de privacidade obtidas com sucesso",
+          body: {
+            groupadd: "contacts",
+            last: "contacts",
+            status: "contacts",
+            profile: "contacts",
+            readreceipts: "all",
+            online: "all",
+            calladd: "all"
+          }
+        },
+        {
+          status: 401,
+          label: "Token de autenticação inválido",
+          body: {
+            error: "client not found"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "No session"
+          }
+        }
+      ]
+    },
+    'instance-privacy-set': {
+      title: 'Alterar configurações de privacidade',
+      description: 'Altera uma ou múltiplas configurações de privacidade da instância do WhatsApp de forma otimizada. Pode alterar apenas as configurações que realmente mudaram.',
+      method: 'POST',
+      path: '/instance/privacy',
+      icon: Lock,
+      color: 'purple',
+      features: [
+        'Altera apenas configurações que mudaram',
+        'Pode alterar uma ou múltiplas configurações',
+        'Retorna todas as configurações atualizadas',
+        'Valores: all, contacts, contact_blacklist, none, match_last_seen, known'
+      ],
+      params: [
+        { name: 'groupadd', type: 'string', required: false, description: 'Quem pode adicionar aos grupos. Valores: all, contacts, contact_blacklist, none' },
+        { name: 'last', type: 'string', required: false, description: 'Quem pode ver visto por último. Valores: all, contacts, contact_blacklist, none' },
+        { name: 'status', type: 'string', required: false, description: 'Quem pode ver status (recado embaixo do nome). Valores: all, contacts, contact_blacklist, none' },
+        { name: 'profile', type: 'string', required: false, description: 'Quem pode ver foto de perfil. Valores: all, contacts, contact_blacklist, none' },
+        { name: 'readreceipts', type: 'string', required: false, description: 'Confirmação de leitura. Valores: all, none' },
+        { name: 'online', type: 'string', required: false, description: 'Quem pode ver status online. Valores: all, match_last_seen' },
+        { name: 'calladd', type: 'string', required: false, description: 'Quem pode fazer chamadas. Valores: all, known' }
+      ],
+      exampleRequest: {
+        groupadd: "contacts",
+        last: "none",
+        status: "contacts"
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Configuração de privacidade alterada com sucesso",
+          body: {
+            groupadd: "all",
+            last: "all",
+            status: "all",
+            profile: "all",
+            readreceipts: "all",
+            online: "all",
+            calladd: "all"
+          }
+        },
+        {
+          status: 400,
+          label: "Dados de entrada inválidos",
+          body: {
+            error: "Invalid privacy value"
+          }
+        },
+        {
+          status: 401,
+          label: "Token de autenticação inválido",
+          body: {
+            error: "client not found"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "string"
+          }
+        }
+      ]
+    },
+    'instance-presence': {
+      title: 'Atualizar status de presença',
+      description: 'Atualiza o status de presença global da instância do WhatsApp. Permite definir se a instância está disponível (online) ou indisponível (offline).',
+      method: 'POST',
+      path: '/instance/presence',
+      icon: Zap,
+      color: 'orange',
+      features: [
+        'Define status disponível (available) ou indisponível (unavailable)',
+        'Controla presença para todos os contatos',
+        'Salva estado atual da presença',
+        'Atenção: unavailable pode afetar confirmações de entrega/leitura'
+      ],
+      params: [
+        { name: 'presence', type: 'string', required: true, description: 'Status de presença da instância. Valores: available (online) ou unavailable (offline)' }
+      ],
+      exampleRequest: {
+        presence: "available"
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Presença atualizada com sucesso",
+          body: {
+            response: "Presence updated successfully"
+          }
+        },
+        {
+          status: 400,
+          label: "Requisição inválida",
+          body: {
+            error: "Invalid presence value"
+          }
+        },
+        {
+          status: 401,
+          label: "Token inválido ou expirado",
+          body: {
+            error: "client not found"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno do servidor",
+          body: {
+            error: "No session"
+          }
+        }
+      ]
     }
   };
 
-  const currentEndpoint = endpointData[selectedEndpoint];
+  const currentEndpointRaw = endpointData[selectedEndpoint as EndpointType];
   const hasTestResponse = Boolean(testResponse);
   const isTestError =
     hasTestResponse &&
@@ -1442,7 +2108,7 @@ export default function ClientApiTab() {
     : 'text-slate-100';
   
   // Verificação de segurança para evitar erros
-  if (!currentEndpoint) {
+  if (!currentEndpointRaw) {
   return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -1453,7 +2119,8 @@ export default function ClientApiTab() {
     );
   }
   
-  const IconComponent = currentEndpoint.icon;
+  const currentEndpoint: EndpointDoc = currentEndpointRaw;
+  
 
   const responseExamples = currentEndpoint.responses && currentEndpoint.responses.length > 0
     ? currentEndpoint.responses
@@ -1468,7 +2135,7 @@ export default function ClientApiTab() {
     : [];
 
   const responseSignature = responseExamples
-    .map((response, idx) => `${idx}-${response.status}-${response.label}`)
+    .map((response: EndpointResponseExample, idx: number) => `${idx}-${response.status}-${response.label}`)
     .join('|');
 
   const requestPayload = buildRequestPayload();
@@ -1477,11 +2144,16 @@ export default function ClientApiTab() {
 
   const buildCurlCommand = (opts: { forCopy: boolean }) => {
     const tokenValue = opts.forCopy ? sanitizedTokenHeaderValue : tokenHeaderValue;
+    const method = currentEndpoint.method;
     const lines = [
-      `curl --request ${currentEndpoint.method}`,
+      `curl --request ${method}`,
       `  --url ${buildEndpointUrl(currentEndpoint.path)}`,
-      `  --header 'Content-Type: application/json'`,
     ];
+
+    // Adiciona Content-Type apenas para métodos que enviam body
+    if (method !== 'GET' && method !== 'DELETE') {
+      lines.push(`  --header 'Content-Type: application/json'`);
+    }
 
     if (requiresSupabaseAuth) {
       const anonValue = SUPABASE_ANON_KEY ? `${SUPABASE_ANON_KEY.substring(0, 30)}...` : 'SUA_CHAVE_ANON';
@@ -1489,7 +2161,11 @@ export default function ClientApiTab() {
     }
 
     lines.push(`  --header 'token: ${tokenValue}'`);
-    lines.push(`  --data '${JSON.stringify(requestPayload, null, 2)}'`);
+
+    // Adiciona --data apenas para métodos que suportam body e têm payload
+    if (method !== 'GET' && method !== 'DELETE' && Object.keys(requestPayload).length > 0) {
+      lines.push(`  --data '${JSON.stringify(requestPayload, null, 2)}'`);
+    }
 
     return lines.join(' \\\n');
   };
@@ -1499,7 +2175,7 @@ export default function ClientApiTab() {
 
   useEffect(() => {
     const nextState: Record<string, boolean> = {};
-    responseExamples.forEach((_, idx) => {
+    responseExamples.forEach((_: EndpointResponseExample, idx: number) => {
       const key = `${selectedEndpoint}-${idx}`;
       nextState[key] = false;
     });
@@ -1521,9 +2197,9 @@ export default function ClientApiTab() {
           {endpoints.map((group) => {
             const isExpanded = expandedGroups.includes(group.id);
             const toggleGroup = () => {
-              setExpandedGroups(prev =>
+              setExpandedGroups((prev: string[]) =>
                 prev.includes(group.id)
-                  ? prev.filter(id => id !== group.id)
+                  ? prev.filter((id: string) => id !== group.id)
                   : [...prev, group.id]
               );
             };
@@ -1616,7 +2292,7 @@ export default function ClientApiTab() {
                   Instâncias Disponíveis
                 </h3>
                 <div className="space-y-3">
-                  {instances.slice(0, 2).map((instance) => (
+                  {instances.slice(0, 2).map((instance: WhatsAppInstance) => (
                     <div key={instance.id} className="bg-white rounded-lg border border-slate-200 p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-slate-900">{instance.name}</span>
@@ -1655,7 +2331,7 @@ export default function ClientApiTab() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Recursos</h3>
               <ul className="space-y-3">
-                {currentEndpoint.features.map((feature, idx) => (
+                {currentEndpoint.features.map((feature: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
                     <div className="mt-1.5 flex h-2 w-2 shrink-0 items-center justify-center rounded-full bg-blue-500"></div>
                     <span className="leading-relaxed">{feature}</span>
@@ -1668,7 +2344,7 @@ export default function ClientApiTab() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900 mb-6">Parâmetros</h3>
               <div className="space-y-6">
-                {currentEndpoint.params.map((param) => (
+                {currentEndpoint.params.map((param: EndpointParam) => (
                   <div key={param.name} className="border-l-2 border-slate-200 pl-4">
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1704,21 +2380,13 @@ export default function ClientApiTab() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {responseExamples.map((response, idx) => {
+                  {responseExamples.map((response: EndpointResponseExample, idx: number) => {
                     const statusString = String(response.status);
                     const statusNumber = Number(statusString);
                     const statusText = `HTTP ${statusString}`;
                     const isError = !Number.isNaN(statusNumber)
                       ? statusNumber >= 400
                       : statusString.startsWith('4') || statusString.startsWith('5');
-                    const cardClass = `bg-slate-900 border ${
-                      isError ? 'border-red-600/60' : 'border-emerald-600/60'
-                    }`;
-                    const barClass = isError
-                      ? 'bg-red-500'
-                      : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500';
-                    const textClass = 'text-slate-100';
-                    const badgeClass = isError ? 'text-red-300' : 'text-emerald-300';
                     const copyKey = `response-${statusString}-${idx}`;
                     const responseKey = `${selectedEndpoint}-${idx}`;
                     const isExpanded = expandedResponses[responseKey] ?? (idx === 0);
@@ -1732,7 +2400,7 @@ export default function ClientApiTab() {
                           <button
                             type="button"
                             onClick={() =>
-                              setExpandedResponses((prev) => ({
+                              setExpandedResponses((prev: Record<string, boolean>) => ({
                                 ...prev,
                                 [responseKey]: !isExpanded,
                               }))
@@ -1848,17 +2516,18 @@ export default function ClientApiTab() {
             <input
               type="text"
               value={testToken}
-              onChange={(e) => setTestToken(e.target.value)}
+              onChange={(e) => setTestToken((e.target as HTMLInputElement).value)}
                       placeholder="Digite seu token aqui"
                       className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-slate-700 text-sm placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm"
             />
           </div>
 
+          {(currentEndpoint.method === 'POST' || currentEndpoint.method === 'PUT') && (
           <div>
                     <h4 className="text-sm font-bold text-slate-700 mb-2">Body</h4>
                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 font-mono text-sm shadow-lg">
                       <div className="space-y-3">
-                        {(selectedEndpoint !== 'send-status') && (
+                        {!(selectedEndpoint === 'profile-name' || selectedEndpoint === 'profile-image' || selectedEndpoint === 'instance-connect' || selectedEndpoint === 'instance-update-name' || selectedEndpoint === 'instance-privacy-set' || selectedEndpoint === 'instance-presence' || selectedEndpoint === 'instance-disconnect') && selectedEndpoint !== 'send-status' && (
                           <div className="flex items-center space-x-2">
                             <span className="text-cyan-400 font-semibold">"number"</span>
                             <span className="text-slate-400">:</span>
@@ -2652,9 +3321,187 @@ export default function ClientApiTab() {
                             )}
                           </>
                         )}
+                        {selectedEndpoint === 'profile-name' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-cyan-400 font-semibold">"name"</span>
+                            <span className="text-slate-400">:</span>
+                            <input
+                              type="text"
+                              value={profileName}
+                              onChange={(e) => setProfileName(e.target.value)}
+                              placeholder="Nome do perfil"
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        )}
+                        {selectedEndpoint === 'profile-image' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-cyan-400 font-semibold">"image"</span>
+                            <span className="text-slate-400">:</span>
+                            <input
+                              type="text"
+                              value={profileImage}
+                              onChange={(e) => setProfileImage(e.target.value)}
+                              placeholder="URL, base64 ou 'remove'/'delete'"
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        )}
+                        {selectedEndpoint === 'instance-connect' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-cyan-400 font-semibold">"phone"</span>
+                            <span className="text-slate-400">:</span>
+                            <input
+                              type="text"
+                              value={instancePhone}
+                              onChange={(e) => setInstancePhone(e.target.value)}
+                              placeholder="5511999999999 (opcional - deixe vazio para QR code)"
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        )}
+                        {(selectedEndpoint === 'instance-disconnect' || 
+                          selectedEndpoint === 'instance-status' || 
+                          selectedEndpoint === 'instance-delete' || 
+                          selectedEndpoint === 'instance-privacy-get') && (
+                          <div className="text-slate-400 text-xs italic py-2">
+                            Este endpoint não requer parâmetros no body
+                          </div>
+                        )}
+                        {selectedEndpoint === 'instance-update-name' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-cyan-400 font-semibold">"name"</span>
+                            <span className="text-slate-400">:</span>
+                            <input
+                              type="text"
+                              value={instanceName}
+                              onChange={(e) => setInstanceName(e.target.value)}
+                              placeholder="Novo nome da instância"
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                            />
+                          </div>
+                        )}
+                        {selectedEndpoint === 'instance-privacy-set' && (
+                          <>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"groupadd"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyGroupadd}
+                                onChange={(e) => setPrivacyGroupadd(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="contacts">contacts</option>
+                                <option value="contact_blacklist">contact_blacklist</option>
+                                <option value="none">none</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"last"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyLast}
+                                onChange={(e) => setPrivacyLast(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="contacts">contacts</option>
+                                <option value="contact_blacklist">contact_blacklist</option>
+                                <option value="none">none</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"status"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyStatus}
+                                onChange={(e) => setPrivacyStatus(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="contacts">contacts</option>
+                                <option value="contact_blacklist">contact_blacklist</option>
+                                <option value="none">none</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"profile"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyProfile}
+                                onChange={(e) => setPrivacyProfile(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="contacts">contacts</option>
+                                <option value="contact_blacklist">contact_blacklist</option>
+                                <option value="none">none</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"readreceipts"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyReadreceipts}
+                                onChange={(e) => setPrivacyReadreceipts(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="none">none</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"online"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyOnline}
+                                onChange={(e) => setPrivacyOnline(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="match_last_seen">match_last_seen</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"calladd"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={privacyCalladd}
+                                onChange={(e) => setPrivacyCalladd(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="">Não alterar</option>
+                                <option value="all">all</option>
+                                <option value="known">known</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
+                        {selectedEndpoint === 'instance-presence' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-cyan-400 font-semibold">"presence"</span>
+                            <span className="text-slate-400">:</span>
+                            <select
+                              value={presenceValue}
+                              onChange={(e) => setPresenceValue(e.target.value)}
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                            >
+                              <option value="available">available (online)</option>
+                              <option value="unavailable">unavailable (offline)</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
                     </div>
           </div>
+          )}
 
           <button
             onClick={handleTest}
