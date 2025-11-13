@@ -98,6 +98,25 @@ export default function ClientApiTab() {
   const { user } = useAuth();
   const generateId = () => Math.random().toString(36).slice(2, 10);
 
+  // Helper function para cores dos métodos HTTP
+  const getMethodColorClasses = (method: string, isSelected: boolean = false) => {
+    if (isSelected) {
+      return 'bg-white/20 text-white';
+    }
+    switch (method) {
+      case 'POST':
+        return 'bg-blue-100 text-blue-700';
+      case 'GET':
+        return 'bg-green-100 text-green-700';
+      case 'PUT':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'DELETE':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-slate-200 text-slate-600';
+    }
+  };
+
   const createMenuButton = (overrides?: Partial<MenuButtonConfig>): MenuButtonConfig => ({
     id: overrides?.id ?? generateId(),
     label: overrides?.label ?? 'Novo botão',
@@ -2241,9 +2260,7 @@ export default function ClientApiTab() {
                               {childData.path}
                             </div>
                           </div>
-                          <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded ${
-                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
-                          }`}>
+                          <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded ${getMethodColorClasses(child.method, isSelected)}`}>
                             {child.method}
                           </span>
                         </button>
@@ -2263,13 +2280,7 @@ export default function ClientApiTab() {
         <div className="sticky top-0 z-20 bg-white border-b border-slate-200">
           <div className="px-10 py-8">
             <div className="flex items-center gap-2 mb-4">
-              <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold ${
-                currentEndpoint.method === 'POST' ? 'bg-blue-100 text-blue-700' : 
-                currentEndpoint.method === 'GET' ? 'bg-green-100 text-green-700' :
-                currentEndpoint.method === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
-                currentEndpoint.method === 'DELETE' ? 'bg-red-100 text-red-700' :
-                'bg-slate-100 text-slate-700'
-              }`}>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold ${getMethodColorClasses(currentEndpoint.method)}`}>
                 {currentEndpoint.method}
               </span>
               <code className="text-sm font-mono text-slate-500">
