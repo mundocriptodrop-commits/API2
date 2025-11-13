@@ -17,14 +17,12 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
   return (
     <aside className="w-64 bg-white/80 backdrop-blur border-r border-slate-200 min-h-screen flex flex-col">
       <div className="px-6 pt-7 pb-6 border-b border-slate-200">
-        <div className="flex items-center space-x-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-            <img src="/favicon.svg" alt="EVA.Send" className="h-6 w-6 object-contain" />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold">EVA.Send</p>
-            <p className="text-sm font-semibold text-slate-800">Painel do cliente</p>
-          </div>
+        <div className="flex items-center justify-center">
+          <img
+            src="/Logo_login.png"
+            alt="EVA.Send"
+            className="w-[184px] h-auto object-contain"
+          />
         </div>
       </div>
 
