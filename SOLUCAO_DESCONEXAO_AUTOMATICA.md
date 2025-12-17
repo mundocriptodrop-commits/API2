@@ -90,3 +90,5 @@ Para melhorar ainda mais, considere:
 - O intervalo de 30 segundos é um equilíbrio entre detecção rápida e performance
 - Erros na verificação também são tratados como possíveis desconexões
 
+
+

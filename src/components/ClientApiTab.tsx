@@ -239,7 +239,7 @@ export default function ClientApiTab() {
   const [loadingInstances, setLoadingInstances] = useState(true);
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointType>('send-text');
   const [activeTab, setActiveTab] = useState<'try' | 'code'>('try');
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(['enviar-mensagem']);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
   const DEFAULT_PUBLIC_API_URL = 'https://api.evasend.com.br/whatsapp';
   const sanitizedPublicApiUrl = import.meta.env.VITE_PUBLIC_API_URL

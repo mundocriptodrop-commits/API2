@@ -184,3 +184,30 @@
 .animate-draw {
   animation: draw 2s ease-out forwards;
 }
+
+/* Ocultar card "Made in Bolt" - Solução abrangente */
+[data-bolt],
+[class*="bolt"],
+[class*="Bolt"],
+[id*="bolt"],
+[id*="Bolt"],
+a[href*="bolt"],
+a[href*="Bolt"],
+*[style*="position: fixed"][style*="bottom"][style*="right"]:not([class*="Toast"]):not([class*="toast"]):not([id*="toast"]),
+*[style*="position:fixed"][style*="bottom"][style*="right"]:not([class*="Toast"]):not([class*="toast"]):not([id*="toast"]) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+}
+
+/* Ocultar tooltips do Bolt */
+[role="tooltip"],
+.tooltip,
+[class*="tooltip"] {
+  display: none !important;
+  visibility: hidden !important;
+}

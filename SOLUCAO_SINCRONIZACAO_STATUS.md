@@ -69,3 +69,5 @@ Após o deploy, o sistema irá:
 2. Detectar instâncias que estão conectadas na API mas marcadas como desconectadas no banco
 3. Corrigir automaticamente essas discrepâncias
 
+
+
