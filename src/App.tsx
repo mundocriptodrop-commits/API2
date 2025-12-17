@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import ClientDashboard from './pages/ClientDashboard';
 
 function AppContent() {
   const { user, profile, loading } = useAuth();
+  const [showLogin, setShowLogin] = useState(false);
 
   if (loading) {
     return (
@@ -15,6 +18,9 @@ function AppContent() {
   }
 
   if (!user || !profile) {
+    if (!showLogin) {
+      return <LandingPage onLogin={() => setShowLogin(true)} />;
+    }
     return <Login />;
   }
 

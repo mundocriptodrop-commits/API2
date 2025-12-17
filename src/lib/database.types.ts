@@ -9,6 +9,47 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      subscription_plans: {
+        Row: {
+          id: string
+          name: string
+          description: string
+          price: number
+          features: Json
+          max_instances: number
+          max_messages_per_day: number
+          is_active: boolean
+          display_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string
+          price?: number
+          features?: Json
+          max_instances?: number
+          max_messages_per_day?: number
+          is_active?: boolean
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string
+          price?: number
+          features?: Json
+          max_instances?: number
+          max_messages_per_day?: number
+          is_active?: boolean
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
       system_settings: {
         Row: {
           id: string
