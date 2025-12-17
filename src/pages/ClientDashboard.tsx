@@ -9,7 +9,7 @@ import ClientApiTab from '../components/ClientApiTab';
 import ClientSettingsTab from '../components/ClientSettingsTab';
 
 export default function ClientDashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('subscription');
   const [pendingCreateInstance, setPendingCreateInstance] = useState(false);
 
   const handleRequestCreateInstance = () => {
