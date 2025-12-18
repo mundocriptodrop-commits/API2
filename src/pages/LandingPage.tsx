@@ -206,8 +206,8 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
               Entrar
             </button>
           </div>
-        </div>
-      </header>
+          </div>
+        </header>
 
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-20 lg:py-32">
@@ -681,9 +681,9 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
               <a href="#" className="hover:text-white transition-colors">Política de Privacidade</a>
               <a href="#" className="hover:text-white transition-colors">Termos de Uso</a>
             </div>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
     </div>
   );
 }
