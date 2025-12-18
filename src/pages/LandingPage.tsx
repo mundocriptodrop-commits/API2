@@ -7,7 +7,7 @@ import {
   Send, 
   Image, 
   Menu, 
-  Carousel, 
+  Layers, 
   CreditCard,
   BarChart3,
   Users,
@@ -87,7 +87,7 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       description: 'Crie botões, listas, enquetes e carrosséis para uma experiência rica e interativa com seus clientes.'
     },
     {
-      icon: Carousel,
+      icon: Layers,
       title: 'Carrossel de Mídia',
       description: 'Envie múltiplas imagens em sequência com botões clicáveis, ideal para catálogos e produtos.'
     },
