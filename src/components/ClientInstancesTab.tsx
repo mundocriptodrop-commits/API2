@@ -689,6 +689,71 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         showToast('Instância criada com sucesso!', 'success');
         closeCreateModal();
         await loadInstances();
+
+        // Buscar a instância recém-criada e abrir modal de conexão automaticamente
+        const { data: newInstance } = await supabase
+          .from('whatsapp_instances')
+          .select('*')
+          .eq('instance_token', response.token)
+          .eq('user_id', user?.id || '')
+          .single();
+
+        if (newInstance && newInstance.status === 'disconnected') {
+          // Aguardar um pouco para garantir que a instância foi criada
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Abrir modal de conexão automaticamente
+          setSelectedInstance(newInstance);
+          setPhoneNumber('');
+          setQrCode('');
+          setPairingCode('');
+          setShowConnectModal(true);
+          setIsConnecting(true);
+
+          // Iniciar conexão automaticamente para gerar QR Code
+          try {
+            const connectResponse = await whatsappApi.connectInstance(
+              newInstance.instance_token,
+              undefined // Sem telefone = gera QR Code
+            );
+
+            await supabase
+              .from('whatsapp_instances')
+              .update({
+                status: 'connecting',
+                phone_number: null,
+              })
+              .eq('id', newInstance.id);
+
+            if (connectResponse.qrCode || connectResponse.pairingCode || connectResponse.code) {
+              const qr = connectResponse.qrCode || connectResponse.qr || null;
+              const code = connectResponse.pairingCode || connectResponse.code || null;
+
+              if (qr) {
+                setQrCode(qr);
+                setPairingCode('');
+                await supabase
+                  .from('whatsapp_instances')
+                  .update({ qr_code: qr })
+                  .eq('id', newInstance.id);
+              } else if (code) {
+                setPairingCode(code);
+                setQrCode('');
+                await supabase
+                  .from('whatsapp_instances')
+                  .update({ pairing_code: code })
+                  .eq('id', newInstance.id);
+              }
+            }
+
+            // Iniciar polling de status
+            startStatusPolling(newInstance);
+          } catch (connectError: any) {
+            console.error('Erro ao conectar automaticamente:', connectError);
+            setIsConnecting(false);
+            // Não mostrar erro aqui, apenas logar - o usuário pode tentar conectar manualmente depois
+          }
+        }
       } else {
         throw new Error('API não retornou token de instância');
       }
