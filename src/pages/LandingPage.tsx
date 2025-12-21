@@ -5,6 +5,16 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
+  Zap,
+  Code,
+  Send,
+  Shield,
+  Clock,
+  Globe,
+  MessageSquare,
+  FileText,
+  Settings,
+  BarChart3
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
@@ -53,25 +63,59 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
   };
 
   const features = [
-    'Envio de mensagens de texto, mídia e interativas',
-    'Menus, botões, listas e carrosséis',
-    'Botão PIX integrado',
-    'Status e stories do WhatsApp',
-    'Múltiplas instâncias simultâneas',
-    'Webhooks em tempo real',
-    'API REST simples e documentada',
-    'Suporte técnico em português'
+    {
+      icon: Send,
+      title: 'Envio de Mensagens',
+      description: 'Envie textos, mídias e mensagens interativas via API REST simples e rápida.'
+    },
+    {
+      icon: MessageSquare,
+      title: 'Recebimento em Tempo Real',
+      description: 'Webhooks configuráveis para receber mensagens e eventos do WhatsApp instantaneamente.'
+    },
+    {
+      icon: FileText,
+      title: 'Múltiplos Formatos',
+      description: 'Suporte completo para imagens, vídeos, áudios, documentos e localização.'
+    },
+    {
+      icon: Settings,
+      title: 'Múltiplas Instâncias',
+      description: 'Gerencie várias contas WhatsApp simultaneamente com isolamento completo.'
+    },
+    {
+      icon: Shield,
+      title: 'Segurança',
+      description: 'Autenticação por token, criptografia e controle de acesso granular.'
+    },
+    {
+      icon: BarChart3,
+      title: 'Monitoramento',
+      description: 'Acompanhe status de entrega, leitura e métricas de uso em tempo real.'
+    }
   ];
 
-  const useCases = [
-    'Integração com CRMs e ERPs',
-    'Automação de atendimento',
-    'Envio de notificações e lembretes',
-    'Distribuição de códigos promocionais',
-    'Tracking de encomendas',
-    'Cobrança e envio de boletos',
-    'Agendamentos e confirmações',
-    'Pesquisas de satisfação'
+  const benefits = [
+    {
+      icon: Zap,
+      title: 'Integração Rápida',
+      description: 'Comece a usar em menos de 10 minutos com nossa documentação completa.'
+    },
+    {
+      icon: Code,
+      title: 'API REST Simples',
+      description: 'Endpoints intuitivos com exemplos em múltiplas linguagens de programação.'
+    },
+    {
+      icon: Clock,
+      title: 'Alta Disponibilidade',
+      description: 'Infraestrutura escalável com 99.9% de uptime garantido.'
+    },
+    {
+      icon: Globe,
+      title: 'Suporte Nacional',
+      description: 'Atendimento em português com equipe técnica especializada.'
+    }
   ];
 
   const faqs = [
@@ -112,21 +156,21 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b border-black sticky top-0 z-50 bg-white">
-        <div className="max-w-6xl mx-auto px-6">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
               <img src="/Logo_login.png" alt="EVA.Send" className="h-8 w-auto" />
-              <span className="text-lg font-bold">EVA.Send</span>
+              <span className="text-xl font-semibold text-gray-900">EVA.Send</span>
             </div>
-            <nav className="hidden md:flex items-center space-x-6 text-sm">
-              <a href="#funcionalidades" className="hover:underline">Funcionalidades</a>
-              <a href="#planos" className="hover:underline">Planos</a>
-              <a href="#faq" className="hover:underline">FAQ</a>
+            <nav className="hidden md:flex items-center space-x-8">
+              <a href="#funcionalidades" className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium">Funcionalidades</a>
+              <a href="#planos" className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium">Planos</a>
+              <a href="#faq" className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium">FAQ</a>
             </nav>
             <button
               onClick={onLogin}
-              className="px-5 py-2 bg-black text-white text-sm font-medium hover:bg-gray-800 transition-colors"
+              className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               Entrar
             </button>
@@ -135,62 +179,86 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       </header>
 
       {/* Hero Section */}
-      <section className="border-b border-black">
-        <div className="max-w-6xl mx-auto px-6 py-24">
-          <div className="max-w-3xl">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-              API WhatsApp para seu sistema
+      <section className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-20 lg:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-4xl mx-auto">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+              API WhatsApp para{' '}
+              <span className="text-blue-600">desenvolvedores</span>
             </h1>
-            <p className="text-xl text-gray-700 mb-8 leading-relaxed">
-              Integre WhatsApp no seu software. Envie mensagens, gerencie conversas e automatize processos com nossa API REST.
+            <p className="text-xl text-gray-600 mb-10 leading-relaxed">
+              Integre WhatsApp no seu sistema com nossa API REST. Envie mensagens, gerencie conversas e automatize processos de forma simples e confiável.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <button
                 onClick={onLogin}
-                className="px-8 py-3 bg-black text-white font-medium hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+                className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl flex items-center gap-2"
               >
                 Começar agora
                 <ArrowRight className="w-5 h-5" />
               </button>
               <a
                 href="#planos"
-                className="px-8 py-3 border-2 border-black text-black font-medium hover:bg-black hover:text-white transition-colors text-center"
+                className="px-8 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:border-blue-500 hover:text-blue-600 transition-colors"
               >
                 Ver planos
               </a>
             </div>
-            <p className="mt-6 text-sm text-gray-600">
-              Teste grátis • Sem cartão de crédito • Suporte em português
+            <p className="mt-8 text-sm text-gray-500">
+              ✓ Teste grátis • ✓ Sem cartão de crédito • ✓ Suporte em português
             </p>
           </div>
         </div>
       </section>
 
-      {/* Funcionalidades */}
-      <section id="funcionalidades" className="border-b border-black">
-        <div className="max-w-6xl mx-auto px-6 py-20">
-          <h2 className="text-3xl font-bold mb-12">Funcionalidades</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {features.map((feature, index) => (
-              <div key={index} className="flex items-start gap-3">
-                <div className="mt-1 w-5 h-5 border-2 border-black flex-shrink-0 flex items-center justify-center">
-                  <Check className="w-3 h-3" />
+      {/* Benefits */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {benefits.map((benefit, index) => (
+              <div key={index} className="text-center p-6">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <benefit.icon className="w-6 h-6 text-blue-600" />
                 </div>
-                <p className="text-gray-700">{feature}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {benefit.title}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {benefit.description}
+                </p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Casos de Uso */}
-      <section className="border-b border-black bg-gray-50">
-        <div className="max-w-6xl mx-auto px-6 py-20">
-          <h2 className="text-3xl font-bold mb-12">Casos de uso</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {useCases.map((useCase, index) => (
-              <div key={index} className="border border-black p-4 bg-white">
-                <p className="text-sm">{useCase}</p>
+      {/* Funcionalidades */}
+      <section id="funcionalidades" className="py-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Funcionalidades
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Tudo que você precisa para integrar WhatsApp no seu sistema
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <div
+                key={index}
+                className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+              >
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <feature.icon className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                  {feature.title}
+                </h3>
+                <p className="text-gray-600">
+                  {feature.description}
+                </p>
               </div>
             ))}
           </div>
@@ -198,84 +266,90 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       </section>
 
       {/* Planos */}
-      <section id="planos" className="border-b border-black">
-        <div className="max-w-6xl mx-auto px-6 py-20">
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold mb-4">Planos</h2>
-            <p className="text-gray-700">Escolha o plano ideal para seu negócio</p>
+      <section id="planos" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Planos e Preços
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Escolha o plano ideal para seu negócio
+            </p>
           </div>
 
           {loading ? (
             <div className="flex justify-center items-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin" />
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             </div>
           ) : plans.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-gray-500">Nenhum plano disponível no momento</p>
+              <p className="text-gray-500 text-lg">Nenhum plano disponível no momento</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
               {plans.map((plan) => (
                 <div
                   key={plan.id}
-                  className="border-2 border-black p-6 bg-white"
+                  className="bg-white rounded-xl shadow-lg border-2 border-gray-200 overflow-hidden hover:border-blue-500 transition-all"
                 >
-                  <h3 className="text-2xl font-bold mb-2">
-                    {plan.name}
-                  </h3>
+                  <div className="p-8">
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      {plan.name}
+                    </h3>
 
-                  {plan.description && (
-                    <p className="text-sm text-gray-600 mb-6">
-                      {plan.description}
-                    </p>
-                  )}
-
-                  <div className="mb-6">
-                    <div className="flex items-baseline">
-                      <span className="text-4xl font-bold">
-                        {formatPrice(plan.price)}
-                      </span>
-                      <span className="text-gray-600 ml-2">/mês</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 mb-8">
-                    <div className="flex items-start gap-2">
-                      <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm">
-                        {plan.max_instances === -1
-                          ? 'Instâncias ilimitadas'
-                          : `Até ${plan.max_instances} ${plan.max_instances === 1 ? 'instância' : 'instâncias'}`}
+                    {plan.description && (
+                      <p className="text-gray-600 text-sm mb-6">
+                        {plan.description}
                       </p>
-                    </div>
-
-                    <div className="flex items-start gap-2">
-                      <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm">
-                        {plan.max_messages_per_day === -1
-                          ? 'Mensagens ilimitadas por dia'
-                          : `Até ${plan.max_messages_per_day.toLocaleString('pt-BR')} mensagens/dia`}
-                      </p>
-                    </div>
-
-                    {Array.isArray(plan.features) && plan.features.length > 0 && (
-                      <>
-                        {plan.features.map((feature, index) => (
-                          <div key={index} className="flex items-start gap-2">
-                            <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm">{feature}</p>
-                          </div>
-                        ))}
-                      </>
                     )}
-                  </div>
 
-                  <button
-                    onClick={onLogin}
-                    className="w-full py-3 px-4 bg-black text-white font-medium hover:bg-gray-800 transition-colors"
-                  >
-                    Começar agora
-                  </button>
+                    <div className="mb-6">
+                      <div className="flex items-baseline">
+                        <span className="text-4xl font-bold text-gray-900">
+                          {formatPrice(plan.price)}
+                        </span>
+                        <span className="text-gray-600 ml-2">/mês</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 mb-8">
+                      <div className="flex items-start space-x-3">
+                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-gray-700">
+                          {plan.max_instances === -1
+                            ? 'Instâncias ilimitadas'
+                            : `Até ${plan.max_instances} ${plan.max_instances === 1 ? 'instância' : 'instâncias'}`}
+                        </p>
+                      </div>
+
+                      <div className="flex items-start space-x-3">
+                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-gray-700">
+                          {plan.max_messages_per_day === -1
+                            ? 'Mensagens ilimitadas por dia'
+                            : `Até ${plan.max_messages_per_day.toLocaleString('pt-BR')} mensagens/dia`}
+                        </p>
+                      </div>
+
+                      {Array.isArray(plan.features) && plan.features.length > 0 && (
+                        <>
+                          {plan.features.map((feature, index) => (
+                            <div key={index} className="flex items-start space-x-3">
+                              <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                              <p className="text-sm text-gray-700">{feature}</p>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={onLogin}
+                      className="w-full py-3 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Começar agora
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -285,7 +359,7 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
             <p className="text-gray-600 mb-2">Já tem uma conta?</p>
             <button
               onClick={onLogin}
-              className="text-black font-medium hover:underline"
+              className="text-blue-600 font-semibold hover:underline"
             >
               Faça login aqui
             </button>
@@ -294,35 +368,39 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="border-b border-black bg-gray-50">
-        <div className="max-w-4xl mx-auto px-6 py-20">
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold mb-4">Perguntas frequentes</h2>
-            <p className="text-gray-700">Dúvidas sobre a EVA.Send API</p>
+      <section id="faq" className="py-20 bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+              Perguntas Frequentes
+            </h2>
+            <p className="text-xl text-gray-600">
+              Tire suas dúvidas sobre a EVA.Send API
+            </p>
           </div>
 
           <div className="space-y-4">
             {faqs.map((faq, index) => (
               <div
                 key={index}
-                className="border border-black bg-white"
+                className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-blue-300 transition-colors"
               >
                 <button
                   onClick={() => toggleFaq(index)}
                   className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
                 >
-                  <span className="font-medium pr-4">
+                  <span className="font-semibold text-gray-900 pr-4">
                     {faq.question}
                   </span>
                   {openFaq === index ? (
-                    <ChevronUp className="w-5 h-5 flex-shrink-0" />
+                    <ChevronUp className="w-5 h-5 text-blue-600 flex-shrink-0" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 flex-shrink-0" />
+                    <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   )}
                 </button>
                 {openFaq === index && (
-                  <div className="px-6 py-4 border-t border-black bg-gray-50">
-                    <p className="text-gray-700">
+                  <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                    <p className="text-gray-600">
                       {faq.answer}
                     </p>
                   </div>
@@ -334,17 +412,17 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       </section>
 
       {/* CTA Final */}
-      <section className="bg-black text-white">
-        <div className="max-w-4xl mx-auto px-6 py-20 text-center">
-          <h2 className="text-3xl font-bold mb-4">
+      <section className="py-20 bg-blue-600">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
             Pronto para começar?
           </h2>
-          <p className="text-xl mb-8 text-gray-300">
-            Comece a integrar WhatsApp no seu sistema hoje mesmo
+          <p className="text-xl text-blue-100 mb-8">
+            Integre WhatsApp no seu sistema hoje mesmo
           </p>
           <button
             onClick={onLogin}
-            className="px-8 py-3 bg-white text-black font-medium hover:bg-gray-200 transition-colors inline-flex items-center gap-2"
+            className="px-8 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors shadow-lg inline-flex items-center gap-2"
           >
             Começar agora
             <ArrowRight className="w-5 h-5" />
@@ -353,35 +431,43 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-black">
-        <div className="max-w-6xl mx-auto px-6 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+      <footer className="bg-gray-900 text-gray-300 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <img src="/Logo_login.png" alt="EVA.Send" className="h-6 w-auto" />
-                <span className="font-bold">EVA.Send</span>
+                <img src="/Logo_login.png" alt="EVA.Send" className="h-6 w-auto filter brightness-0 invert" />
+                <span className="text-white font-semibold">EVA.Send</span>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-400">
                 API WhatsApp para integração com sistemas
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Links</h4>
+              <h4 className="text-white font-semibold mb-4">Produto</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#funcionalidades" className="text-gray-600 hover:underline">Funcionalidades</a></li>
-                <li><a href="#planos" className="text-gray-600 hover:underline">Planos</a></li>
-                <li><a href="#faq" className="text-gray-600 hover:underline">FAQ</a></li>
+                <li><a href="#funcionalidades" className="hover:text-white transition-colors">Funcionalidades</a></li>
+                <li><a href="#planos" className="hover:text-white transition-colors">Planos</a></li>
+                <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Contato</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <h4 className="text-white font-semibold mb-4">Desenvolvedor</h4>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#" className="hover:text-white transition-colors">Documentação</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">API Reference</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Suporte</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">Contato</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
                 <li>suporte@evasend.com</li>
                 <li>(00) 0000-0000</li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-gray-300 pt-8 text-center text-sm text-gray-600">
+          <div className="border-t border-gray-800 pt-8 text-center text-sm text-gray-400">
             <p>© 2024 EVA.Send. Todos os direitos reservados.</p>
           </div>
         </div>
