@@ -831,9 +831,10 @@ async function handleRequest(request, env = {}, ctx) {
     }
 
     // Determina o destino do proxy baseado no tipo de endpoint
-    // Endpoints de instância e perfil vão para API externa
+    // Endpoints de instância, perfil e integrações vão para API externa
     // Endpoints de envio (send-*) vão para Supabase Edge Functions
     const isInstanceOrProfileEndpoint = path.startsWith('/instance/') || path.startsWith('/profile/');
+    const isIntegrationEndpoint = path.startsWith('/chatwoot/');
     const EXTERNAL_API_URL = 'https://sender.uazapi.com';
     
     let targetUrl;
@@ -841,7 +842,7 @@ async function handleRequest(request, env = {}, ctx) {
       'token': token, // Passa o token para a API
     };
     
-    if (isInstanceOrProfileEndpoint) {
+    if (isInstanceOrProfileEndpoint || isIntegrationEndpoint) {
       // Proxy para API externa (sender.uazapi.com)
       targetUrl = `${EXTERNAL_API_URL}${path}`;
       
