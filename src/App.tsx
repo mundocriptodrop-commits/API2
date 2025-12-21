@@ -21,7 +21,7 @@ function AppContent() {
     if (!showLogin) {
       return <LandingPage onLogin={() => setShowLogin(true)} />;
     }
-    return <Login />;
+    return <Login onBack={() => setShowLogin(false)} />;
   }
 
   if (profile.role === 'admin') {

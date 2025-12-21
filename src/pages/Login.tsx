@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Lock, HelpCircle, Loader2, AlertCircle } from 'lucide-react';
+import { User, Lock, HelpCircle, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 
-export default function Login() {
+interface LoginProps {
+  onBack?: () => void;
+}
+
+export default function Login({ onBack }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -250,6 +254,17 @@ export default function Login() {
 
           {/* Login Card with enhanced design */}
           <div className="bg-white/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8 border border-white/20 animate-slide-up">
+            {/* Back button */}
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mb-4 flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors group"
+              >
+                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                <span className="text-sm font-medium">Voltar para tela inicial</span>
+              </button>
+            )}
+            
             <div className="text-center mb-6 sm:mb-8">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Bem-vindo</h2>
               <p className="text-gray-600 text-xs sm:text-sm">
