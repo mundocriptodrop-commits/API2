@@ -1011,19 +1011,58 @@ async function handleRequest(request, env = {}, ctx) {
       // Substitui URLs do webhook para usar o domínio customizado
       // Aplica apenas para endpoints de integração (Chatwoot)
       if (isIntegrationEndpoint && responseJson) {
-        // Substitui webhook_url ou webhookUrl se existir
-        if (responseJson.webhook_url && typeof responseJson.webhook_url === 'string') {
-          // Substitui o domínio e ajusta o path se necessário
-          responseJson.webhook_url = responseJson.webhook_url
-            .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
-            .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
-        } else if (responseJson.webhookUrl && typeof responseJson.webhookUrl === 'string') {
-          responseJson.webhookUrl = responseJson.webhookUrl
-            .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
-            .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
+        if (DEBUG_MODE) {
+          console.log(`[DEBUG] Chatwoot endpoint detected, checking for webhook URLs in response`);
         }
-        // Atualiza responseData com a URL substituída
-        responseData = JSON.stringify(responseJson);
+        
+        // Função recursiva para substituir URLs em qualquer nível do objeto
+        let urlReplaced = false;
+        const replaceWebhookUrls = (obj) => {
+          if (typeof obj !== 'object' || obj === null) {
+            return obj;
+          }
+          
+          if (Array.isArray(obj)) {
+            return obj.map(item => replaceWebhookUrls(item));
+          }
+          
+          const result = {};
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              const value = obj[key];
+              if (typeof value === 'string' && value.includes('sender.uazapi.com')) {
+                // Substitui qualquer URL que contenha sender.uazapi.com
+                const originalUrl = value;
+                const newUrl = value
+                  .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
+                  .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
+                result[key] = newUrl;
+                urlReplaced = true;
+                if (DEBUG_MODE) {
+                  console.log(`[DEBUG] Replaced webhook URL: ${originalUrl} -> ${newUrl}`);
+                }
+              } else if (typeof value === 'object' && value !== null) {
+                result[key] = replaceWebhookUrls(value);
+              } else {
+                result[key] = value;
+              }
+            }
+          }
+          return result;
+        };
+        
+        // Aplica a substituição recursivamente
+        responseJson = replaceWebhookUrls(responseJson);
+        
+        if (urlReplaced) {
+          if (DEBUG_MODE) {
+            console.log(`[DEBUG] Webhook URL replacement completed`);
+          }
+          // Atualiza responseData com a URL substituída
+          responseData = JSON.stringify(responseJson);
+        } else if (DEBUG_MODE) {
+          console.log(`[DEBUG] No webhook URLs found to replace in response`);
+        }
       }
       
       if (!response.ok) {
