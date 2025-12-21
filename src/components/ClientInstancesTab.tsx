@@ -188,7 +188,20 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return true;
     }
     
+    // Verificar se há QR code ou pairing code ativo - se houver, NÃO está conectado ainda
+    const hasQrCode = (instanceData?.qrcode && instanceData.qrcode.length > 0) || 
+                     (statusResponse?.qrCode && statusResponse.qrCode.length > 0);
+    const hasPairingCode = (instanceData?.paircode && instanceData.paircode.length > 0) || 
+                          (statusResponse?.pairingCode && statusResponse.pairingCode.length > 0);
+    
+    // Se tem QR code ou pairing code, está em processo de conexão, não conectado
+    if (hasQrCode || hasPairingCode) {
+      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ EM CONEXÃO - QR/Pairing code presente, não marcar como conectado`);
+      return null; // Manter status atual (provavelmente "connecting" ou "disconnected")
+    }
+    
     // Se tem owner, phone_number, profileName ou status="connected", provavelmente está conectado
+    // MAS só se NÃO tiver QR code ativo (verificado acima)
     if (hasOwner || hasPhoneNumber || hasProfileName || hasStatusConnected) {
       console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Indicadores secundários:`, {
         hasOwner: !!hasOwner,
@@ -207,12 +220,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     // Para marcar como DESCONECTADO, precisamos de:
     // 1. Ambos campos explicitamente false (loggedIn E connected)
     // 2. E não ter nenhum indicador positivo de conexão (verificado acima)
-    // 3. E não ter QR code ou pairing code (pode estar conectando)
+    // 3. E não ter QR code ou pairing code (pode estar conectando) - já verificado acima
     // 4. E ter estrutura de resposta válida (statusData e instanceData existem)
-    const hasQrCode = (instanceData?.qrcode && instanceData.qrcode.length > 0) || 
-                     (statusResponse?.qrCode && statusResponse.qrCode.length > 0);
-    const hasPairingCode = (instanceData?.paircode && instanceData.paircode.length > 0) || 
-                          (statusResponse?.pairingCode && statusResponse.pairingCode.length > 0);
     
     // Só retornar false se TODAS as condições forem verdadeiras
     if (hasLoggedInFalse && 
@@ -702,57 +711,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           // Aguardar um pouco para garantir que a instância foi criada
           await new Promise(resolve => setTimeout(resolve, 500));
           
-          // Abrir modal de conexão automaticamente
+          // Abrir modal de conexão - usuário escolhe como conectar (QR code ou número)
           setSelectedInstance(newInstance);
           setPhoneNumber('');
           setQrCode('');
           setPairingCode('');
           setShowConnectModal(true);
-          setIsConnecting(true);
-
-          // Iniciar conexão automaticamente para gerar QR Code
-          try {
-            const connectResponse = await whatsappApi.connectInstance(
-              newInstance.instance_token,
-              undefined // Sem telefone = gera QR Code
-            );
-
-            await supabase
-              .from('whatsapp_instances')
-              .update({
-                status: 'connecting',
-                phone_number: null,
-              })
-              .eq('id', newInstance.id);
-
-            if (connectResponse.qrCode || connectResponse.pairingCode || connectResponse.code) {
-              const qr = connectResponse.qrCode || connectResponse.qr || null;
-              const code = connectResponse.pairingCode || connectResponse.code || null;
-
-              if (qr) {
-                setQrCode(qr);
-                setPairingCode('');
-                await supabase
-                  .from('whatsapp_instances')
-                  .update({ qr_code: qr })
-                  .eq('id', newInstance.id);
-              } else if (code) {
-                setPairingCode(code);
-                setQrCode('');
-                await supabase
-                  .from('whatsapp_instances')
-                  .update({ pairing_code: code })
-                  .eq('id', newInstance.id);
-              }
-            }
-
-            // Iniciar polling de status
-            startStatusPolling(newInstance);
-          } catch (connectError: any) {
-            console.error('Erro ao conectar automaticamente:', connectError);
-            setIsConnecting(false);
-            // Não mostrar erro aqui, apenas logar - o usuário pode tentar conectar manualmente depois
-          }
+          setIsConnecting(false); // Não iniciar conexão automaticamente
         }
       } else {
         throw new Error('API não retornou token de instância');
@@ -963,7 +928,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           });
         }
 
-        if (isConnected) {
+        // IMPORTANTE: Não marcar como conectado se ainda houver QR code ou pairing code ativo
+        // Isso evita falsos positivos quando o QR code ainda não foi lido
+        if (isConnected && !qrCodeFromApi && !pairingCodeFromApi) {
           // Cancelar o timeout já que detectamos conexão
           if (timeoutId) {
             clearTimeout(timeoutId);
@@ -1019,10 +986,21 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         const status = await whatsappApi.getInstanceStatus(instance.instance_token);
         const connectionStatus = getConnectionStatus(status, instance.name);
         
-        // Se está conectado na API, atualizar para conectado em vez de desconectado
-        if (connectionStatus === true) {
+        // Verificar se há QR code ou pairing code ativo
+        const instanceData = (status as any).instance;
+        const statusData = (status as any).status;
+        const hasQrCode = (instanceData?.qrcode && instanceData.qrcode.length > 0) || 
+                         (statusData?.qrcode && statusData.qrcode.length > 0) ||
+                         (status as any).qrCode || 
+                         (status as any).qrcode;
+        const hasPairingCode = (instanceData?.paircode && instanceData.paircode.length > 0) || 
+                              (statusData?.paircode && statusData.paircode.length > 0) ||
+                              (status as any).pairingCode || 
+                              (status as any).paircode;
+        
+        // Se está conectado na API E não tem QR/pairing code, atualizar para conectado
+        if (connectionStatus === true && !hasQrCode && !hasPairingCode) {
           const phoneNumber = extractPhoneNumber(status);
-          const instanceData = (status as any).instance;
           
           await supabase
             .from('whatsapp_instances')
