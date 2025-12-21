@@ -828,6 +828,107 @@ export default function ClientApiTab() {
       const response = await fetch(buildEndpointUrl(currentEndpoint.path), fetchOptions);
 
       const data = await response.json();
+      
+      // Se for endpoint do Chatwoot e tiver webhook_url na resposta, tenta atualizar automaticamente no Chatwoot
+      if (selectedEndpoint === 'chatwoot-config' && data.webhook_url && response.ok && chatwootAccessToken && chatwootAccountId && chatwootInboxId) {
+        try {
+          const chatwootBaseUrl = chatwootUrl.endsWith('/') ? chatwootUrl.slice(0, -1) : chatwootUrl;
+          
+          // Tenta atualizar o webhook na inbox do Chatwoot usando PATCH
+          // O Chatwoot pode aceitar webhook_url no update da inbox
+          const updateWebhookUrl = `${chatwootBaseUrl}/api/v1/accounts/${chatwootAccountId}/inboxes/${chatwootInboxId}`;
+          
+          const chatwootResponse = await fetch(updateWebhookUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'api_access_token': chatwootAccessToken,
+            },
+            body: JSON.stringify({
+              webhook_url: data.webhook_url
+            }),
+          });
+          
+          if (chatwootResponse.ok) {
+            const chatwootData = await chatwootResponse.json();
+            data.webhook_updated_in_chatwoot = true;
+            data.chatwoot_response = chatwootData;
+          } else {
+            // Se PATCH não funcionar, tenta criar/atualizar webhook via endpoint de webhooks
+            const webhooksUrl = `${chatwootBaseUrl}/api/v1/accounts/${chatwootAccountId}/webhooks`;
+            
+            // Primeiro, tenta listar webhooks existentes
+            const listWebhooksResponse = await fetch(webhooksUrl, {
+              method: 'GET',
+              headers: {
+                'api_access_token': chatwootAccessToken,
+              },
+            });
+            
+            if (listWebhooksResponse.ok) {
+              const existingWebhooks = await listWebhooksResponse.json();
+              // Procura webhook existente para esta inbox
+              const existingWebhook = existingWebhooks.find((wh: any) => 
+                wh.webhook_url === data.webhook_url || 
+                (wh.inbox_id && wh.inbox_id.toString() === chatwootInboxId.toString())
+              );
+              
+              if (existingWebhook) {
+                // Atualiza webhook existente
+                const updateWebhookResponse = await fetch(`${webhooksUrl}/${existingWebhook.id}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'api_access_token': chatwootAccessToken,
+                  },
+                  body: JSON.stringify({
+                    webhook_url: data.webhook_url,
+                    inbox_id: parseInt(chatwootInboxId)
+                  }),
+                });
+                
+                if (updateWebhookResponse.ok) {
+                  data.webhook_updated_in_chatwoot = true;
+                } else {
+                  const errorData = await updateWebhookResponse.json().catch(() => ({ error: 'Erro ao atualizar webhook' }));
+                  data.webhook_updated_in_chatwoot = false;
+                  data.webhook_update_error = errorData;
+                }
+              } else {
+                // Cria novo webhook
+                const createWebhookResponse = await fetch(webhooksUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'api_access_token': chatwootAccessToken,
+                  },
+                  body: JSON.stringify({
+                    webhook_url: data.webhook_url,
+                    inbox_id: parseInt(chatwootInboxId)
+                  }),
+                });
+                
+                if (createWebhookResponse.ok) {
+                  data.webhook_updated_in_chatwoot = true;
+                } else {
+                  const errorData = await createWebhookResponse.json().catch(() => ({ error: 'Erro ao criar webhook' }));
+                  data.webhook_updated_in_chatwoot = false;
+                  data.webhook_update_error = errorData;
+                }
+              }
+            } else {
+              const errorData = await chatwootResponse.json().catch(() => ({ error: 'Erro ao atualizar webhook no Chatwoot' }));
+              data.webhook_updated_in_chatwoot = false;
+              data.webhook_update_error = errorData;
+            }
+          }
+        } catch (error: any) {
+          // Se falhar, apenas adiciona informação no log, mas não bloqueia a resposta
+          data.webhook_updated_in_chatwoot = false;
+          data.webhook_update_error = { error: 'Erro ao tentar atualizar webhook no Chatwoot', message: error.message };
+        }
+      }
+      
       setTestResponse(JSON.stringify(data, null, 2));
     } catch (error: any) {
       setTestResponse(JSON.stringify({ 
@@ -3789,19 +3890,24 @@ export default function ClientApiTab() {
                         const parsed = JSON.parse(testResponse);
                         // Se for resposta do Chatwoot e tiver webhook_url, destaca
                         if (selectedEndpoint === 'chatwoot-config' && parsed.webhook_url) {
+                          const webhookUpdated = parsed.webhook_updated_in_chatwoot === true;
+                          const webhookUpdateError = parsed.webhook_update_error;
+                          
                           return (
                             <div className="space-y-4">
-                              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-lg p-4">
+                              <div className={`bg-gradient-to-r ${webhookUpdated ? 'from-green-500/10 to-emerald-500/10 border-green-500/30' : 'from-blue-500/10 to-cyan-500/10 border-blue-500/30'} border rounded-lg p-4`}>
                                 <div className="flex items-center space-x-2 mb-2">
-                                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                  <span className="text-sm font-semibold text-green-400">URL do Webhook para Chatwoot</span>
+                                  <div className={`w-2 h-2 ${webhookUpdated ? 'bg-green-500' : 'bg-blue-500'} rounded-full ${webhookUpdated ? 'animate-pulse' : ''}`}></div>
+                                  <span className={`text-sm font-semibold ${webhookUpdated ? 'text-green-400' : 'text-blue-400'}`}>
+                                    {webhookUpdated ? '✅ Webhook configurado automaticamente no Chatwoot!' : 'URL do Webhook para Chatwoot'}
+                                  </span>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                   <input
                                     type="text"
                                     readOnly
                                     value={parsed.webhook_url}
-                                    className="flex-1 bg-slate-800 border border-green-500/50 rounded-lg px-4 py-2 text-green-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    className={`flex-1 bg-slate-800 border ${webhookUpdated ? 'border-green-500/50 text-green-300' : 'border-blue-500/50 text-blue-300'} rounded-lg px-4 py-2 text-sm font-mono focus:outline-none focus:ring-2 ${webhookUpdated ? 'focus:ring-green-500' : 'focus:ring-blue-500'}`}
                                   />
                                   <button
                                     onClick={() => {
@@ -3809,7 +3915,7 @@ export default function ClientApiTab() {
                                       setCopiedEndpoint('webhook-url');
                                       setTimeout(() => setCopiedEndpoint(null), 2000);
                                     }}
-                                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center space-x-2"
+                                    className={`px-4 py-2 ${webhookUpdated ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'} text-white rounded-lg transition-colors flex items-center space-x-2`}
                                   >
                                     {copiedEndpoint === 'webhook-url' ? (
                                       <>
@@ -3824,9 +3930,29 @@ export default function ClientApiTab() {
                                     )}
                                   </button>
                                 </div>
-                                <p className="text-xs text-green-300/70 mt-2">
-                                  ⚠️ Copie esta URL e cole no campo "URL do webhook" nas configurações da inbox no Chatwoot
-                                </p>
+                                {webhookUpdated ? (
+                                  <p className="text-xs text-green-300/70 mt-2">
+                                    ✅ Webhook atualizado automaticamente no Chatwoot! A integração está pronta para uso.
+                                  </p>
+                                ) : webhookUpdateError ? (
+                                  <div className="mt-2">
+                                    <p className="text-xs text-yellow-300/70 mb-1">
+                                      ⚠️ Não foi possível atualizar automaticamente o webhook no Chatwoot.
+                                    </p>
+                                    <p className="text-xs text-yellow-300/70">
+                                      Por favor, copie a URL acima e cole manualmente no campo "URL do webhook" nas configurações da inbox no Chatwoot.
+                                    </p>
+                                    {webhookUpdateError.error && (
+                                      <p className="text-xs text-red-300/70 mt-1">
+                                        Erro: {typeof webhookUpdateError.error === 'string' ? webhookUpdateError.error : JSON.stringify(webhookUpdateError.error)}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-blue-300/70 mt-2">
+                                    ⚠️ Copie esta URL e cole no campo "URL do webhook" nas configurações da inbox no Chatwoot
+                                  </p>
+                                )}
                               </div>
                               <div className="border-t border-slate-700 pt-4">
                                 <div className="text-xs text-slate-400 mb-2">Resposta completa:</div>
