@@ -49,16 +49,21 @@ export default function AdminUsersTab() {
     if (!editingProfile) return;
 
     try {
-      await adminApi.updateUser(editingProfile.id, formData.maxInstances);
+      // Se a senha foi preenchida, enviar para atualização
+      const password = formData.password.trim() !== '' ? formData.password : undefined;
+      await adminApi.updateUser(editingProfile.id, formData.maxInstances, password);
 
-      alert('Usuário atualizado com sucesso!');
+      const message = password 
+        ? 'Usuário e senha atualizados com sucesso!'
+        : 'Usuário atualizado com sucesso!';
+      alert(message);
       setShowModal(false);
       setEditingProfile(null);
       setFormData({ email: '', password: '', maxInstances: 5 });
       loadProfiles();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      alert('Erro ao atualizar usuário');
+      alert(error.message || 'Erro ao atualizar usuário');
     }
   }
 
@@ -218,6 +223,24 @@ export default function AdminUsersTab() {
                     />
                   </div>
                 </>
+              )}
+
+              {editingProfile && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nova Senha (deixe em branco para não alterar)
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Deixe em branco para manter a senha atual"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Preencha apenas se desejar alterar a senha do usuário
+                  </p>
+                </div>
               )}
 
               <div>

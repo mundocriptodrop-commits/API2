@@ -41,19 +41,21 @@ export const adminApi = {
     return data;
   },
 
-  async updateUser(userId: string, maxInstances: number) {
+  async updateUser(userId: string, maxInstances: number, password?: string) {
     const headers = await getAuthHeaders();
     const response = await fetch(`${ADMIN_FUNCTION_URL}/update`, {
       method: 'PUT',
       headers,
-      body: JSON.stringify({ userId, maxInstances }),
+      body: JSON.stringify({ userId, maxInstances, password }),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error('Failed to update user');
+      throw new Error(data.error || 'Failed to update user');
     }
 
-    return response.json();
+    return data;
   },
 
   async deleteUser(userId: string) {

@@ -110,14 +110,30 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === 'PUT' && path === '/update') {
-      const { userId, maxInstances } = await req.json();
+      const { userId, maxInstances, password } = await req.json();
 
+      // Atualizar max_instances no perfil
       const { error } = await supabase
         .from('profiles')
         .update({ max_instances: maxInstances })
         .eq('id', userId);
 
       if (error) throw error;
+
+      // Se uma senha foi fornecida, atualizar a senha do usuário
+      if (password && password.trim() !== '') {
+        const { error: passwordError } = await supabase.auth.admin.updateUserById(
+          userId,
+          { password }
+        );
+
+        if (passwordError) {
+          return new Response(
+            JSON.stringify({ error: passwordError.message || 'Erro ao atualizar senha' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
 
       return new Response(
         JSON.stringify({ success: true }),
