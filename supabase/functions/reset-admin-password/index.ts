@@ -1,7 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 Deno.serve(async (req) => {
-  // Permitir CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -12,9 +11,6 @@ Deno.serve(async (req) => {
       }
     });
   }
-
-  // Esta função usa service role key internamente, então não precisa de autenticação externa
-  // Para segurança adicional, você pode adicionar verificação de IP ou chave secreta
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -35,10 +31,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // ID do admin: 013484ea-851f-493a-8831-49765044553a
     const adminUserId = '013484ea-851f-493a-8831-49765044553a';
-    
-    // Nova senha segura: Admin123!@#
     const newPassword = 'Admin123!@#';
     
     const { data, error } = await supabase.auth.admin.updateUserById(adminUserId, {
