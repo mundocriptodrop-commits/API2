@@ -1124,6 +1124,138 @@ async function handleRequest(request, env = {}, ctx) {
               console.log(`[DEBUG] Full response: ${JSON.stringify(responseJson).substring(0, 500)}`);
             }
           }
+          
+          // Tenta atualizar o webhook automaticamente no Chatwoot se tiver webhook_url e os dados necessários
+          if (response.ok && responseJson.webhook_url && bodyData && bodyData.url && bodyData.access_token && bodyData.account_id && bodyData.inbox_id) {
+            try {
+              console.log(`[INFO] Attempting to update webhook in Chatwoot automatically`);
+              const chatwootBaseUrl = bodyData.url.endsWith('/') ? bodyData.url.slice(0, -1) : bodyData.url;
+              const updateWebhookUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.account_id}/inboxes/${bodyData.inbox_id}`;
+              
+              const chatwootResponse = await fetch(updateWebhookUrl, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'api_access_token': bodyData.access_token,
+                },
+                body: JSON.stringify({
+                  webhook_url: responseJson.webhook_url
+                }),
+              });
+              
+              if (chatwootResponse.ok) {
+                const chatwootData = await chatwootResponse.json();
+                responseJson.webhook_updated_in_chatwoot = true;
+                responseJson.chatwoot_response = chatwootData;
+                console.log(`[INFO] Webhook updated successfully in Chatwoot`);
+              } else {
+                // Se PATCH não funcionar, tenta criar/atualizar via endpoint de webhooks
+                const webhooksUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.account_id}/webhooks`;
+                
+                try {
+                  const listWebhooksResponse = await fetch(webhooksUrl, {
+                    method: 'GET',
+                    headers: {
+                      'api_access_token': bodyData.access_token,
+                    },
+                  });
+                  
+                  if (listWebhooksResponse.ok) {
+                    const existingWebhooks = await listWebhooksResponse.json();
+                    const existingWebhook = Array.isArray(existingWebhooks) 
+                      ? existingWebhooks.find((wh) => 
+                          wh.webhook_url === responseJson.webhook_url || 
+                          (wh.inbox_id && wh.inbox_id.toString() === bodyData.inbox_id.toString())
+                        )
+                      : null;
+                    
+                    if (existingWebhook) {
+                      // Atualiza webhook existente
+                      const updateWebhookResponse = await fetch(`${webhooksUrl}/${existingWebhook.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'api_access_token': bodyData.access_token,
+                        },
+                        body: JSON.stringify({
+                          webhook_url: responseJson.webhook_url,
+                          inbox_id: parseInt(bodyData.inbox_id)
+                        }),
+                      });
+                      
+                      if (updateWebhookResponse.ok) {
+                        responseJson.webhook_updated_in_chatwoot = true;
+                        console.log(`[INFO] Webhook updated successfully in Chatwoot via webhooks endpoint`);
+                      } else {
+                        const errorText = await updateWebhookResponse.text();
+                        responseJson.webhook_updated_in_chatwoot = false;
+                        responseJson.webhook_update_error = {
+                          error: `HTTP ${updateWebhookResponse.status}`,
+                          details: errorText.substring(0, 200)
+                        };
+                        console.log(`[WARN] Failed to update webhook in Chatwoot: ${updateWebhookResponse.status}`);
+                      }
+                    } else {
+                      // Cria novo webhook
+                      const createWebhookResponse = await fetch(webhooksUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'api_access_token': bodyData.access_token,
+                        },
+                        body: JSON.stringify({
+                          webhook_url: responseJson.webhook_url,
+                          inbox_id: parseInt(bodyData.inbox_id)
+                        }),
+                      });
+                      
+                      if (createWebhookResponse.ok) {
+                        responseJson.webhook_updated_in_chatwoot = true;
+                        console.log(`[INFO] Webhook created successfully in Chatwoot`);
+                      } else {
+                        const errorText = await createWebhookResponse.text();
+                        responseJson.webhook_updated_in_chatwoot = false;
+                        responseJson.webhook_update_error = {
+                          error: `HTTP ${createWebhookResponse.status}`,
+                          details: errorText.substring(0, 200)
+                        };
+                        console.log(`[WARN] Failed to create webhook in Chatwoot: ${createWebhookResponse.status}`);
+                      }
+                    }
+                  } else {
+                    const errorText = await listWebhooksResponse.text();
+                    responseJson.webhook_updated_in_chatwoot = false;
+                    responseJson.webhook_update_error = {
+                      error: `HTTP ${listWebhooksResponse.status}`,
+                      details: errorText.substring(0, 200)
+                    };
+                    console.log(`[WARN] Failed to list webhooks in Chatwoot: ${listWebhooksResponse.status}`);
+                  }
+                } catch (webhookError) {
+                  responseJson.webhook_updated_in_chatwoot = false;
+                  responseJson.webhook_update_error = {
+                    error: 'Erro ao tentar atualizar webhook via endpoint de webhooks',
+                    message: webhookError.message
+                  };
+                  console.error(`[ERROR] Webhook endpoint error: ${webhookError.message}`);
+                }
+              }
+              
+              // Atualiza responseData com o resultado da atualização do Chatwoot
+              responseData = JSON.stringify(responseJson);
+            } catch (chatwootError) {
+              responseJson.webhook_updated_in_chatwoot = false;
+              responseJson.webhook_update_error = {
+                error: 'Erro ao tentar atualizar webhook no Chatwoot',
+                message: chatwootError.message
+              };
+              console.error(`[ERROR] Failed to update webhook in Chatwoot: ${chatwootError.message}`);
+              // Atualiza responseData mesmo em caso de erro
+              responseData = JSON.stringify(responseJson);
+            }
+          } else {
+            console.log(`[INFO] Skipping automatic Chatwoot webhook update - missing required data`);
+          }
         } catch (error) {
           console.error(`[ERROR] Failed to process webhook URL replacement: ${error.message}`);
           console.error(`[ERROR] Stack: ${error.stack}`);
