@@ -914,8 +914,24 @@ async function handleRequest(request, env = {}, ctx) {
       console.log(`[INFO] API response - Status: ${response.status}, URL: ${targetUrl}`);
     }
     
+    // Para endpoints de integração, verifica headers também
+    if (isIntegrationEndpoint) {
+      console.log(`[INFO] Checking response headers for webhook URL`);
+      const headers = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+        if (key.toLowerCase().includes('webhook') || value.includes('sender.uazapi.com')) {
+          console.log(`[INFO] Found webhook-related header: ${key} = ${value.substring(0, 100)}`);
+        }
+      });
+      if (DEBUG_MODE) {
+        console.log(`[DEBUG] All response headers:`, JSON.stringify(headers));
+      }
+    }
+    
     // Lê a resposta (só pode ler uma vez!)
-    const responseData = await response.text();
+    // Usa 'let' para permitir modificação posterior (ex: adicionar webhook_url)
+    let responseData = await response.text();
     
     const baseLogPayload = {
       endpoint: path,
@@ -1019,51 +1035,106 @@ async function handleRequest(request, env = {}, ctx) {
         console.log(`[INFO] Response keys: ${Object.keys(responseJson).join(', ')}`);
         console.log(`[INFO] Response preview: ${JSON.stringify(responseJson).substring(0, 300)}`);
         
-        // Função recursiva para substituir URLs em qualquer nível do objeto
-        let urlReplaced = false;
-        const replaceWebhookUrls = (obj) => {
-          if (typeof obj !== 'object' || obj === null) {
-            return obj;
+        // Log completo da resposta para debug
+        if (DEBUG_MODE) {
+          console.log(`[DEBUG] Full response JSON: ${JSON.stringify(responseJson, null, 2)}`);
+        }
+        
+        // Verifica se a resposta tem webhook_url ou webhookUrl
+        // Se não tiver, pode ser que a API não retorne, mas vamos adicionar na resposta
+        // baseado no ID da instância
+        const hasWebhookUrl = responseJson.webhook_url || responseJson.webhookUrl || responseJson.webhook;
+        let webhookWasAdded = false;
+        
+        if (!hasWebhookUrl && response.ok && validation && validation.instance) {
+          try {
+            // Constrói a URL do webhook usando o domínio customizado e o ID da instância
+            const webhookUrl = `https://api.evasend.com.br/whatsapp/chatwoot/webhook/${validation.instance.id}`;
+            responseJson.webhook_url = webhookUrl;
+            webhookWasAdded = true;
+            console.log(`[INFO] Added webhook_url to response: ${webhookUrl}`);
+          } catch (error) {
+            console.error(`[ERROR] Failed to add webhook_url: ${error.message}`);
           }
+        } else if (hasWebhookUrl) {
+          console.log(`[INFO] Found existing webhook URL in response: ${responseJson.webhook_url || responseJson.webhookUrl || responseJson.webhook}`);
+        } else {
+          console.log(`[WARN] Cannot add webhook_url: validation=${!!validation}, instance=${!!(validation && validation.instance)}, response.ok=${response.ok}`);
+        }
+        
+        try {
+          console.log(`[INFO] About to apply recursive URL replacement. responseJson keys: ${Object.keys(responseJson).join(', ')}`);
           
-          if (Array.isArray(obj)) {
-            return obj.map(item => replaceWebhookUrls(item));
-          }
-          
-          const result = {};
-          for (const key in obj) {
-            if (obj.hasOwnProperty(key)) {
-              const value = obj[key];
-              if (typeof value === 'string' && value.includes('sender.uazapi.com')) {
-                // Substitui qualquer URL que contenha sender.uazapi.com
-                const originalUrl = value;
-                const newUrl = value
-                  .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
-                  .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
-                result[key] = newUrl;
-                urlReplaced = true;
-                console.log(`[INFO] Replaced webhook URL in field '${key}': ${originalUrl.substring(0, 80)}... -> ${newUrl.substring(0, 80)}...`);
-              } else if (typeof value === 'object' && value !== null) {
-                result[key] = replaceWebhookUrls(value);
-              } else {
-                result[key] = value;
+          // Função recursiva para substituir URLs em qualquer nível do objeto
+          let urlReplaced = false;
+          const replaceWebhookUrls = (obj) => {
+            if (typeof obj !== 'object' || obj === null) {
+              return obj;
+            }
+            
+            if (Array.isArray(obj)) {
+              return obj.map(item => replaceWebhookUrls(item));
+            }
+            
+            const result = {};
+            for (const key in obj) {
+              if (obj.hasOwnProperty(key)) {
+                const value = obj[key];
+                if (typeof value === 'string' && value.includes('sender.uazapi.com')) {
+                  // Substitui qualquer URL que contenha sender.uazapi.com
+                  const originalUrl = value;
+                  const newUrl = value
+                    .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
+                    .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
+                  result[key] = newUrl;
+                  urlReplaced = true;
+                  console.log(`[INFO] Replaced webhook URL in field '${key}': ${originalUrl.substring(0, 80)}... -> ${newUrl.substring(0, 80)}...`);
+                } else if (typeof value === 'object' && value !== null) {
+                  result[key] = replaceWebhookUrls(value);
+                } else {
+                  result[key] = value;
+                }
               }
             }
+            return result;
+          };
+          
+          // Aplica a substituição recursivamente
+          responseJson = replaceWebhookUrls(responseJson);
+          console.log(`[INFO] After recursive replacement. responseJson keys: ${Object.keys(responseJson).join(', ')}, has webhook_url: ${!!responseJson.webhook_url}`);
+          
+          // Sempre atualiza responseData se modificamos o responseJson (adicionamos webhook_url ou substituímos URLs)
+          // Verifica se o webhook_url foi adicionado ou se houve substituição de URLs
+          const hasWebhookInResponse = !!(responseJson.webhook_url || responseJson.webhookUrl);
+          const wasModified = urlReplaced || hasWebhookInResponse || webhookWasAdded;
+          
+          console.log(`[INFO] Response modification check - urlReplaced: ${urlReplaced}, hasWebhookInResponse: ${hasWebhookInResponse}, webhookWasAdded: ${webhookWasAdded}, wasModified: ${wasModified}`);
+          
+          if (wasModified) {
+            if (urlReplaced) {
+              console.log(`[INFO] Webhook URL replacement completed successfully`);
+            }
+            // Atualiza responseData com o JSON modificado
+            responseData = JSON.stringify(responseJson);
+            console.log(`[INFO] Final response updated. Contains webhook_url: ${hasWebhookInResponse}`);
+            console.log(`[INFO] Final response preview: ${responseData.substring(0, 200)}`);
+          } else {
+            console.log(`[WARN] No webhook URLs found to replace in response. Response keys: ${Object.keys(responseJson).join(', ')}`);
+            if (DEBUG_MODE) {
+              console.log(`[DEBUG] Full response: ${JSON.stringify(responseJson).substring(0, 500)}`);
+            }
           }
-          return result;
-        };
-        
-        // Aplica a substituição recursivamente
-        responseJson = replaceWebhookUrls(responseJson);
-        
-        if (urlReplaced) {
-          console.log(`[INFO] Webhook URL replacement completed successfully`);
-          // Atualiza responseData com a URL substituída
-          responseData = JSON.stringify(responseJson);
-        } else {
-          console.log(`[WARN] No webhook URLs found to replace in response. Response keys: ${Object.keys(responseJson).join(', ')}`);
-          if (DEBUG_MODE) {
-            console.log(`[DEBUG] Full response: ${JSON.stringify(responseJson).substring(0, 500)}`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to process webhook URL replacement: ${error.message}`);
+          console.error(`[ERROR] Stack: ${error.stack}`);
+          // Mesmo em caso de erro, tenta atualizar responseData se webhook foi adicionado
+          if (webhookWasAdded) {
+            try {
+              responseData = JSON.stringify(responseJson);
+              console.log(`[INFO] Updated responseData after error (webhook was added)`);
+            } catch (e) {
+              console.error(`[ERROR] Failed to stringify responseJson: ${e.message}`);
+            }
           }
         }
       }
