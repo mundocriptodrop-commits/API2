@@ -557,7 +557,9 @@ async function handleRequest(request, env = {}, ctx) {
       '/profile/name', '/profile/image',
       // Instância
       '/instance/connect', '/instance/disconnect', '/instance/status', '/instance/updateInstanceName', 
-      '/instance', '/instance/privacy', '/instance/presence'
+      '/instance', '/instance/privacy', '/instance/presence',
+      // Integrações
+      '/chatwoot/config'
     ];
     if (!supportedEndpoints.includes(path)) {
       console.warn(`[WARN] Unsupported endpoint requested: ${path} (Original: ${url.pathname})`);

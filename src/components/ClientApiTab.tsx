@@ -29,7 +29,8 @@ interface WhatsAppInstance {
 type EndpointType = 
   | 'send-text' | 'send-media' | 'send-menu' | 'send-carousel' | 'send-pix-button' | 'send-status'
   | 'profile-name' | 'profile-image'
-  | 'instance-connect' | 'instance-disconnect' | 'instance-status' | 'instance-update-name' | 'instance-delete' | 'instance-privacy-get' | 'instance-privacy-set' | 'instance-presence';
+  | 'instance-connect' | 'instance-disconnect' | 'instance-status' | 'instance-update-name' | 'instance-delete' | 'instance-privacy-get' | 'instance-privacy-set' | 'instance-presence'
+  | 'chatwoot-config';
 
 type EndpointParam = {
   name: string;
@@ -230,6 +231,16 @@ export default function ClientApiTab() {
   const [privacyOnline, setPrivacyOnline] = useState('');
   const [privacyCalladd, setPrivacyCalladd] = useState('');
   const [presenceValue, setPresenceValue] = useState('available');
+
+  // Estados para chatwoot-config
+  const [chatwootEnabled, setChatwootEnabled] = useState(true);
+  const [chatwootUrl, setChatwootUrl] = useState('https://chat.evachat.com.br');
+  const [chatwootAccessToken, setChatwootAccessToken] = useState('');
+  const [chatwootAccountId, setChatwootAccountId] = useState('');
+  const [chatwootInboxId, setChatwootInboxId] = useState('');
+  const [chatwootIgnoreGroups, setChatwootIgnoreGroups] = useState(false);
+  const [chatwootSignMessages, setChatwootSignMessages] = useState(true);
+  const [chatwootCreateNewConversation, setChatwootCreateNewConversation] = useState(false);
 
   const [expandedResponses, setExpandedResponses] = useState<Record<string, boolean>>({});
   
@@ -762,6 +773,17 @@ export default function ClientApiTab() {
         return {
           presence: presenceValue,
         };
+      case 'chatwoot-config':
+        return {
+          enabled: chatwootEnabled,
+          url: chatwootUrl,
+          access_token: chatwootAccessToken,
+          account_id: parseInt(chatwootAccountId) || 0,
+          inbox_id: parseInt(chatwootInboxId) || 0,
+          ignore_groups: chatwootIgnoreGroups,
+          sign_messages: chatwootSignMessages,
+          create_new_conversation: chatwootCreateNewConversation,
+        };
       default:
         return {};
     }
@@ -859,6 +881,14 @@ export default function ClientApiTab() {
         { id: 'send-carousel' as EndpointType, label: 'Enviar carrossel de mídia com botões', method: 'POST' },
         { id: 'send-pix-button' as EndpointType, label: 'Enviar botão PIX', method: 'POST' },
         { id: 'send-status' as EndpointType, label: 'Enviar Stories (Status)', method: 'POST' },
+      ]
+    },
+    {
+      id: 'integracoes' as const,
+      label: 'Integrações',
+      count: 1,
+      children: [
+        { id: 'chatwoot-config' as EndpointType, label: 'Configurar integração Chatwoot', method: 'PUT' },
       ]
     }
   ];
@@ -2109,6 +2139,80 @@ export default function ClientApiTab() {
           }
         }
       ]
+    },
+    'chatwoot-config': {
+      title: 'Configurar integração Chatwoot',
+      description: 'Atualiza a configuração da integração com Chatwoot para a instância. Configura todos os parâmetros da integração, reinicializa automaticamente o cliente Chatwoot quando habilitado e retorna URL do webhook para configurar no Chatwoot. Sincronização bidirecional de mensagens novas entre WhatsApp e Chatwoot, sincronização automática de contatos (nome e telefone) e atualização automática LID → PN (Local ID para Phone Number). Sistema de nomes inteligentes com til (~). ⚠️ AVISO: Esta integração está em fase BETA - teste em ambiente não-produtivo antes de usar em produção.',
+      method: 'PUT',
+      path: '/chatwoot/config',
+      icon: Settings,
+      color: 'purple',
+      features: [
+        'Configura todos os parâmetros da integração Chatwoot',
+        'Reinicializa automaticamente o cliente Chatwoot quando habilitado',
+        'Retorna URL do webhook para configurar no Chatwoot',
+        'Sincronização bidirecional de mensagens novas entre WhatsApp e Chatwoot',
+        'Sincronização automática de contatos (nome e telefone)',
+        'Atualização automática LID → PN (Local ID para Phone Number)',
+        'Sistema de nomes inteligentes com til (~)',
+        'Nomes com til (~) são atualizados automaticamente quando o contato modifica seu nome no WhatsApp',
+        'Nomes específicos: Para definir um nome fixo, remova o til (~) do nome no Chatwoot',
+        'Durante a migração LID→PN, não haverá duplicação de conversas',
+        'Todas as respostas dos agentes aparecem nativamente no Chatwoot',
+        '⚠️ FASE BETA: Funcionalidades podem mudar sem aviso prévio',
+        '⚠️ LIMITAÇÃO: Sincronização de histórico não implementada - apenas mensagens novas são sincronizadas'
+      ],
+      params: [
+        { name: 'enabled', type: 'boolean', required: true, description: 'Habilitar/desabilitar integração com Chatwoot' },
+        { name: 'url', type: 'string', required: true, description: 'URL base da instância Chatwoot (sem barra final). Exemplo: "https://app.chatwoot.com"' },
+        { name: 'access_token', type: 'string', required: true, description: 'Token de acesso da API Chatwoot (obtido em Profile Settings > Access Token)' },
+        { name: 'account_id', type: 'integer', required: true, description: 'ID da conta no Chatwoot (visível na URL da conta)' },
+        { name: 'inbox_id', type: 'integer', required: true, description: 'ID da inbox no Chatwoot (obtido nas configurações da inbox)' },
+        { name: 'ignore_groups', type: 'boolean', required: false, description: 'Ignorar mensagens de grupos do WhatsApp na sincronização' },
+        { name: 'sign_messages', type: 'boolean', required: false, description: 'Assinar mensagens enviadas para WhatsApp com identificação do agente' },
+        { name: 'create_new_conversation', type: 'boolean', required: false, description: 'Sempre criar nova conversa ao invés de reutilizar conversas existentes' }
+      ],
+      exampleRequest: {
+        enabled: true,
+        url: "https://chat.evachat.com.br",
+        access_token: "pxTv3AJcUwZUSxCS6c8q4JMN",
+        account_id: 31,
+        inbox_id: 134,
+        ignore_groups: false,
+        sign_messages: true,
+        create_new_conversation: false
+      },
+      responses: [
+        {
+          status: 200,
+          label: "Configuração atualizada com sucesso",
+          body: {
+            success: true,
+            webhook_url: "https://sender.uazapi.com/webhook/chatwoot/..."
+          }
+        },
+        {
+          status: 400,
+          label: "Dados inválidos no body da requisição",
+          body: {
+            error: "Invalid request data"
+          }
+        },
+        {
+          status: 401,
+          label: "Token inválido/expirado",
+          body: {
+            error: "Invalid or expired token"
+          }
+        },
+        {
+          status: 500,
+          label: "Erro interno ao salvar configuração",
+          body: {
+            error: "Internal server error"
+          }
+        }
+      ]
     }
   };
 
@@ -2543,7 +2647,7 @@ export default function ClientApiTab() {
                     <h4 className="text-sm font-bold text-slate-700 mb-2">Body</h4>
                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 font-mono text-sm shadow-lg">
                       <div className="space-y-3">
-                        {!(selectedEndpoint === 'profile-name' || selectedEndpoint === 'profile-image' || selectedEndpoint === 'instance-connect' || selectedEndpoint === 'instance-update-name' || selectedEndpoint === 'instance-privacy-set' || selectedEndpoint === 'instance-presence' || selectedEndpoint === 'instance-disconnect') && selectedEndpoint !== 'send-status' && (
+                        {!(selectedEndpoint === 'profile-name' || selectedEndpoint === 'profile-image' || selectedEndpoint === 'instance-connect' || selectedEndpoint === 'instance-update-name' || selectedEndpoint === 'instance-privacy-set' || selectedEndpoint === 'instance-presence' || selectedEndpoint === 'instance-disconnect' || selectedEndpoint === 'chatwoot-config') && selectedEndpoint !== 'send-status' && (
                           <div className="flex items-center space-x-2">
                             <span className="text-cyan-400 font-semibold">"number"</span>
                             <span className="text-slate-400">:</span>
@@ -3514,9 +3618,105 @@ export default function ClientApiTab() {
                             </select>
                           </div>
                         )}
+                        {selectedEndpoint === 'chatwoot-config' && (
+                          <>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"enabled"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={chatwootEnabled ? 'true' : 'false'}
+                                onChange={(e) => setChatwootEnabled(e.target.value === 'true')}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="true">true</option>
+                                <option value="false">false</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"url"</span>
+                              <span className="text-slate-400">:</span>
+                              <input
+                                type="text"
+                                value={chatwootUrl}
+                                onChange={(e) => setChatwootUrl(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                placeholder="https://app.chatwoot.com"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"access_token"</span>
+                              <span className="text-slate-400">:</span>
+                              <input
+                                type="text"
+                                value={chatwootAccessToken}
+                                onChange={(e) => setChatwootAccessToken(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                placeholder="Token de acesso da API Chatwoot"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"account_id"</span>
+                              <span className="text-slate-400">:</span>
+                              <input
+                                type="number"
+                                value={chatwootAccountId}
+                                onChange={(e) => setChatwootAccountId(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                placeholder="1"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"inbox_id"</span>
+                              <span className="text-slate-400">:</span>
+                              <input
+                                type="number"
+                                value={chatwootInboxId}
+                                onChange={(e) => setChatwootInboxId(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                                placeholder="5"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"ignore_groups"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={chatwootIgnoreGroups ? 'true' : 'false'}
+                                onChange={(e) => setChatwootIgnoreGroups(e.target.value === 'true')}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"sign_messages"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={chatwootSignMessages ? 'true' : 'false'}
+                                onChange={(e) => setChatwootSignMessages(e.target.value === 'true')}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="true">true</option>
+                                <option value="false">false</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-cyan-400 font-semibold">"create_new_conversation"</span>
+                              <span className="text-slate-400">:</span>
+                              <select
+                                value={chatwootCreateNewConversation ? 'true' : 'false'}
+                                onChange={(e) => setChatwootCreateNewConversation(e.target.value === 'true')}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                              >
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
-          </div>
+                  </div>
           )}
 
           <button
