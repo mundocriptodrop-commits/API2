@@ -103,7 +103,7 @@ export default function ClientSettingsTab() {
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium text-gray-900">Notificações por Email</p>
+              <p className="font-medium text-gray-900">Notificações Rápidas</p>
               <p className="text-sm text-gray-500">
                 Receba alertas importantes por email
               </p>
