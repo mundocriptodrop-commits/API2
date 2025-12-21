@@ -717,6 +717,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         phoneNumber || undefined
       );
 
+      console.log('[CONNECT] Resposta da API connectInstance:', response);
+
       await supabase
         .from('whatsapp_instances')
         .update({
@@ -727,24 +729,84 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
       await loadInstances();
 
-      if (response.qrCode || response.pairingCode || response.code) {
-        const qr = response.qrCode || response.qr || null;
-        const code = response.pairingCode || response.code || null;
+      // Verificar QR code na resposta inicial - múltiplos formatos possíveis
+      const qr = response.qrCode || response.qr || (response as any).qrcode || (response as any).instance?.qrcode || null;
+      const code = response.pairingCode || response.code || (response as any).paircode || (response as any).instance?.paircode || null;
 
-        if (qr) {
-          setQrCode(qr);
-          setPairingCode('');
-          await supabase
-            .from('whatsapp_instances')
-            .update({ qr_code: qr })
-            .eq('id', selectedInstance.id);
-        } else if (code) {
-          setPairingCode(code);
-          setQrCode('');
-          await supabase
-            .from('whatsapp_instances')
-            .update({ pairing_code: code })
-            .eq('id', selectedInstance.id);
+      console.log('[CONNECT] QR code encontrado na resposta inicial:', qr ? 'Sim' : 'Não');
+      console.log('[CONNECT] Pairing code encontrado na resposta inicial:', code ? 'Sim' : 'Não');
+
+      if (qr) {
+        setQrCode(qr);
+        setPairingCode('');
+        setIsConnecting(false);
+        await supabase
+          .from('whatsapp_instances')
+          .update({ qr_code: qr })
+          .eq('id', selectedInstance.id);
+        console.log('[CONNECT] QR code definido do estado');
+      } else if (code) {
+        setPairingCode(code);
+        setQrCode('');
+        setIsConnecting(false);
+        await supabase
+          .from('whatsapp_instances')
+          .update({ pairing_code: code })
+          .eq('id', selectedInstance.id);
+        console.log('[CONNECT] Pairing code definido do estado');
+      } else {
+        // Se não veio na resposta inicial, buscar imediatamente no status
+        console.log('[CONNECT] QR code não veio na resposta inicial, buscando no status...');
+        try {
+          const status = await whatsappApi.getInstanceStatus(selectedInstance.instance_token);
+          console.log('[CONNECT] Resposta do getInstanceStatus:', status);
+          
+          const instanceData = (status as any).instance;
+          const statusData = (status as any).status;
+          
+          // Verificar todos os formatos possíveis
+          const qrFromStatus = instanceData?.qrcode || 
+                              instanceData?.qrCode || 
+                              statusData?.qrcode || 
+                              statusData?.qrCode || 
+                              (status as any).qrCode || 
+                              (status as any).qrcode || 
+                              null;
+          
+          const codeFromStatus = instanceData?.paircode || 
+                                instanceData?.pairingCode || 
+                                statusData?.paircode || 
+                                statusData?.pairingCode || 
+                                (status as any).pairingCode || 
+                                (status as any).paircode || 
+                                null;
+
+          console.log('[CONNECT] QR code do status:', qrFromStatus ? 'Sim' : 'Não');
+          console.log('[CONNECT] Pairing code do status:', codeFromStatus ? 'Sim' : 'Não');
+
+          if (qrFromStatus && qrFromStatus.trim() !== '') {
+            setQrCode(qrFromStatus);
+            setPairingCode('');
+            setIsConnecting(false);
+            await supabase
+              .from('whatsapp_instances')
+              .update({ qr_code: qrFromStatus })
+              .eq('id', selectedInstance.id);
+            console.log('[CONNECT] QR code definido do status');
+          } else if (codeFromStatus && codeFromStatus.trim() !== '') {
+            setPairingCode(codeFromStatus);
+            setQrCode('');
+            setIsConnecting(false);
+            await supabase
+              .from('whatsapp_instances')
+              .update({ pairing_code: codeFromStatus })
+              .eq('id', selectedInstance.id);
+            console.log('[CONNECT] Pairing code definido do status');
+          } else {
+            console.log('[CONNECT] QR code ainda não disponível, iniciando polling...');
+          }
+        } catch (statusError) {
+          console.error('[CONNECT] Erro ao buscar status inicial:', statusError);
         }
       }
 
@@ -805,9 +867,36 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         const connectionStatus = getConnectionStatus(status, instance.name);
         const isConnected = connectionStatus === true;
         
-        const qrCodeFromApi = instanceData?.qrcode || status.qrCode;
-        const pairingCodeFromApi = instanceData?.paircode || status.pairingCode;
+        // Verificar QR code em TODOS os formatos possíveis
+        const qrCodeFromApi = instanceData?.qrcode || 
+                             instanceData?.qrCode || 
+                             statusData?.qrcode || 
+                             statusData?.qrCode || 
+                             status.qrCode || 
+                             (status as any).qrcode || 
+                             null;
+        
+        // Verificar pairing code em TODOS os formatos possíveis
+        const pairingCodeFromApi = instanceData?.paircode || 
+                                  instanceData?.pairingCode || 
+                                  statusData?.paircode || 
+                                  statusData?.pairingCode || 
+                                  status.pairingCode || 
+                                  (status as any).paircode || 
+                                  null;
+        
         const phoneNumber = extractPhoneNumber(status);
+        
+        // Log para debug
+        if (pollCount <= 3 || qrCodeFromApi || pairingCodeFromApi) {
+          console.log(`[POLLING:${instance.name}] Tentativa ${pollCount}:`, {
+            isConnected,
+            hasQrCode: !!qrCodeFromApi,
+            hasPairingCode: !!pairingCodeFromApi,
+            instanceData: !!instanceData,
+            statusData: !!statusData
+          });
+        }
 
         if (isConnected) {
           // Cancelar o timeout já que detectamos conexão
@@ -1048,14 +1137,33 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   function openConnectModal(instance: WhatsAppInstance) {
     setSelectedInstance(instance);
     setPhoneNumber('');
-    setQrCode(instance.qr_code || '');
-    setPairingCode(instance.pairing_code || '');
+    
+    // Carregar QR code e pairing code do banco se existirem
+    const savedQrCode = instance.qr_code || '';
+    const savedPairingCode = instance.pairing_code || '';
+    
+    setQrCode(savedQrCode);
+    setPairingCode(savedPairingCode);
     setShowConnectModal(true);
 
+    console.log('[MODAL] Abrindo modal de conexão:', {
+      instanceName: instance.name,
+      status: instance.status,
+      hasQrCode: !!savedQrCode,
+      hasPairingCode: !!savedPairingCode
+    });
+
     if (instance.status === 'connecting') {
-      setIsConnecting(true);
+      setIsConnecting(!savedQrCode && !savedPairingCode); // Só mostrar loading se não tiver QR/pairing code
       if (instance.instance_token) {
-        startStatusPolling(instance);
+        // Se já tem QR code salvo, não precisa fazer polling imediatamente
+        // Mas vamos verificar se ainda é válido
+        if (!savedQrCode && !savedPairingCode) {
+          startStatusPolling(instance);
+        } else {
+          // Mesmo tendo QR code, vamos fazer polling para verificar se conectou
+          startStatusPolling(instance);
+        }
       }
     } else {
       setIsConnecting(false);
