@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Copy, Check, ChevronRight, Send, Image, Smartphone, Zap, Plus, Trash2, User, Settings, Power, PowerOff, Eye, Lock } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -789,18 +789,37 @@ export default function ClientApiTab() {
     }
   };
 
+  // Ref para controlar se há uma requisição em andamento
+  const requestInProgressRef = useRef(false);
+
   const handleTest = async () => {
     if (!testToken) {
       setTestResponse('{"error": "Token é obrigatório"}');
       return;
     }
 
+    // Prevenir múltiplas requisições simultâneas
+    if (requestInProgressRef.current || isLoading) {
+      console.warn('Requisição já em andamento, ignorando clique duplicado');
+      return;
+    }
+
+    requestInProgressRef.current = true;
     setIsLoading(true);
     setTestResponse('');
 
     try {
       const body = buildRequestPayload();
       const method = currentEndpoint.method;
+
+      // Gera ID único para idempotência (apenas para endpoints de envio de mensagem)
+      const messageId = crypto.randomUUID();
+      const isMessageEndpoint = ['send-text', 'send-media', 'send-menu', 'send-carousel', 'send-pix-button', 'send-status'].includes(selectedEndpoint);
+      
+      // Adiciona message_id para controle de duplicação (apenas para mensagens)
+      if (isMessageEndpoint && method === 'POST' && typeof body === 'object' && body !== null) {
+        (body as Record<string, unknown>).message_id = messageId;
+      }
 
       const headers: Record<string, string> = {
         token: testToken,
@@ -809,6 +828,11 @@ export default function ClientApiTab() {
       // Adiciona Content-Type apenas para métodos que enviam body
       if (method !== 'GET' && method !== 'DELETE') {
         headers['Content-Type'] = 'application/json';
+      }
+
+      // Adiciona header de idempotência para mensagens
+      if (isMessageEndpoint) {
+        headers['X-Idempotency-Key'] = messageId;
       }
 
       if (requiresSupabaseAuth && SUPABASE_ANON_KEY) {
@@ -842,6 +866,10 @@ export default function ClientApiTab() {
       }, null, 2));
     } finally {
       setIsLoading(false);
+      // Aguarda um pequeno delay antes de permitir nova requisição (debounce)
+      setTimeout(() => {
+        requestInProgressRef.current = false;
+      }, 500);
     }
   };
 
