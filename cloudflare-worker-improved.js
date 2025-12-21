@@ -837,6 +837,10 @@ async function handleRequest(request, env = {}, ctx) {
     const isIntegrationEndpoint = path.startsWith('/chatwoot/');
     const EXTERNAL_API_URL = 'https://sender.uazapi.com';
     
+    if (isIntegrationEndpoint) {
+      console.log(`[INFO] Integration endpoint detected: ${path}`);
+    }
+    
     let targetUrl;
     const fetchHeaders = {
       'token': token, // Passa o token para a API
@@ -1011,9 +1015,9 @@ async function handleRequest(request, env = {}, ctx) {
       // Substitui URLs do webhook para usar o domínio customizado
       // Aplica apenas para endpoints de integração (Chatwoot)
       if (isIntegrationEndpoint && responseJson) {
-        if (DEBUG_MODE) {
-          console.log(`[DEBUG] Chatwoot endpoint detected, checking for webhook URLs in response`);
-        }
+        console.log(`[INFO] Chatwoot endpoint detected, checking for webhook URLs in response`);
+        console.log(`[INFO] Response keys: ${Object.keys(responseJson).join(', ')}`);
+        console.log(`[INFO] Response preview: ${JSON.stringify(responseJson).substring(0, 300)}`);
         
         // Função recursiva para substituir URLs em qualquer nível do objeto
         let urlReplaced = false;
@@ -1038,9 +1042,7 @@ async function handleRequest(request, env = {}, ctx) {
                   .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
                 result[key] = newUrl;
                 urlReplaced = true;
-                if (DEBUG_MODE) {
-                  console.log(`[DEBUG] Replaced webhook URL: ${originalUrl} -> ${newUrl}`);
-                }
+                console.log(`[INFO] Replaced webhook URL in field '${key}': ${originalUrl.substring(0, 80)}... -> ${newUrl.substring(0, 80)}...`);
               } else if (typeof value === 'object' && value !== null) {
                 result[key] = replaceWebhookUrls(value);
               } else {
@@ -1055,13 +1057,14 @@ async function handleRequest(request, env = {}, ctx) {
         responseJson = replaceWebhookUrls(responseJson);
         
         if (urlReplaced) {
-          if (DEBUG_MODE) {
-            console.log(`[DEBUG] Webhook URL replacement completed`);
-          }
+          console.log(`[INFO] Webhook URL replacement completed successfully`);
           // Atualiza responseData com a URL substituída
           responseData = JSON.stringify(responseJson);
-        } else if (DEBUG_MODE) {
-          console.log(`[DEBUG] No webhook URLs found to replace in response`);
+        } else {
+          console.log(`[WARN] No webhook URLs found to replace in response. Response keys: ${Object.keys(responseJson).join(', ')}`);
+          if (DEBUG_MODE) {
+            console.log(`[DEBUG] Full response: ${JSON.stringify(responseJson).substring(0, 500)}`);
+          }
         }
       }
       
@@ -1114,7 +1117,29 @@ async function handleRequest(request, env = {}, ctx) {
       'X-RateLimit-Reset': rateLimit.reset.toString(),
     };
     
-    return new Response(JSON.stringify(responseJson), {
+    // IMPORTANTE: Se responseData foi modificado (para integrações), usa ele
+    // Caso contrário, usa o responseJson stringificado
+    // responseData já foi modificado pela lógica de substituição se necessário
+    const finalResponseBody = responseData || JSON.stringify(responseJson);
+    
+    if (isIntegrationEndpoint) {
+      console.log(`[INFO] Returning response for integration endpoint. Response length: ${finalResponseBody.length}`);
+      // Log uma amostra da resposta para verificar se a substituição funcionou
+      if (finalResponseBody.includes('webhook')) {
+        const webhookMatch = finalResponseBody.match(/https?:\/\/[^\s"']+webhook[^\s"']*/);
+        if (webhookMatch) {
+          console.log(`[INFO] Found webhook URL in response: ${webhookMatch[0].substring(0, 120)}`);
+        }
+      }
+      // Verifica se ainda tem sender.uazapi.com (não deveria ter se a substituição funcionou)
+      if (finalResponseBody.includes('sender.uazapi.com')) {
+        console.log(`[WARN] Response still contains sender.uazapi.com - replacement may have failed`);
+      } else {
+        console.log(`[INFO] Response verified: no sender.uazapi.com found (replacement successful)`);
+      }
+    }
+    
+    return new Response(finalResponseBody, {
       status: response.status,
       headers: responseHeaders,
     });
