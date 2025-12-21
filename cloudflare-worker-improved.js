@@ -1007,6 +1007,25 @@ async function handleRequest(request, env = {}, ctx) {
     let responseJson;
     try {
       responseJson = JSON.parse(responseData);
+      
+      // Substitui URLs do webhook para usar o domínio customizado
+      // Aplica apenas para endpoints de integração (Chatwoot)
+      if (isIntegrationEndpoint && responseJson) {
+        // Substitui webhook_url ou webhookUrl se existir
+        if (responseJson.webhook_url && typeof responseJson.webhook_url === 'string') {
+          // Substitui o domínio e ajusta o path se necessário
+          responseJson.webhook_url = responseJson.webhook_url
+            .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
+            .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
+        } else if (responseJson.webhookUrl && typeof responseJson.webhookUrl === 'string') {
+          responseJson.webhookUrl = responseJson.webhookUrl
+            .replace('https://sender.uazapi.com/chatwoot/', 'https://api.evasend.com.br/whatsapp/chatwoot/')
+            .replace('https://sender.uazapi.com', 'https://api.evasend.com.br/whatsapp');
+        }
+        // Atualiza responseData com a URL substituída
+        responseData = JSON.stringify(responseJson);
+      }
+      
       if (!response.ok) {
         baseLogPayload.error_message =
           responseJson?.error || responseJson?.message || baseLogPayload.error_message;
