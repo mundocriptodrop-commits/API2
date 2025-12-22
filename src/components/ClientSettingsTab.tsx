@@ -12,6 +12,9 @@ export default function ClientSettingsTab() {
   const [chatUrl, setChatUrl] = useState('');
   const [loadingChatUrl, setLoadingChatUrl] = useState(true);
   const [savingChatUrl, setSavingChatUrl] = useState(false);
+  const [chatApiKey, setChatApiKey] = useState('');
+  const [loadingChatApiKey, setLoadingChatApiKey] = useState(true);
+  const [savingChatApiKey, setSavingChatApiKey] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -25,6 +28,7 @@ export default function ClientSettingsTab() {
   useEffect(() => {
     if (user?.id) {
       loadChatUrl();
+      loadChatApiKey();
     }
   }, [user?.id]);
 
@@ -47,6 +51,25 @@ export default function ClientSettingsTab() {
     }
   }
 
+  async function loadChatApiKey() {
+    try {
+      setLoadingChatApiKey(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('chat_api_key')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      setChatApiKey(data?.chat_api_key || '');
+    } catch (error) {
+      console.error('Error loading chat API key:', error);
+      showToast('Erro ao carregar API Key do Chat', 'error');
+    } finally {
+      setLoadingChatApiKey(false);
+    }
+  }
+
   async function handleSaveChatUrl() {
     if (!user?.id) return;
 
@@ -64,6 +87,26 @@ export default function ClientSettingsTab() {
       showToast(error.message || 'Erro ao salvar URL do Chat', 'error');
     } finally {
       setSavingChatUrl(false);
+    }
+  }
+
+  async function handleSaveChatApiKey() {
+    if (!user?.id) return;
+
+    setSavingChatApiKey(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ chat_api_key: chatApiKey.trim() || null })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      showToast('API Key do Chat salva com sucesso!', 'success');
+    } catch (error: any) {
+      console.error('Error saving chat API key:', error);
+      showToast(error.message || 'Erro ao salvar API Key do Chat', 'error');
+    } finally {
+      setSavingChatApiKey(false);
     }
   }
 
@@ -204,7 +247,24 @@ export default function ClientSettingsTab() {
             </p>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              API Key do Chat
+            </label>
+            <input
+              type="password"
+              value={chatApiKey}
+              onChange={(e) => setChatApiKey(e.target.value)}
+              placeholder="pxTv3AJcUwZUSxCS6c8q4JMN"
+              disabled={loadingChatApiKey || savingChatApiKey}
+              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed font-mono text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              API Key do sistema de Chat para autenticação nas integrações
+            </p>
+          </div>
+
+          <div className="pt-4 border-t border-gray-200 space-y-3">
             <button
               onClick={handleSaveChatUrl}
               disabled={loadingChatUrl || savingChatUrl}
@@ -219,6 +279,24 @@ export default function ClientSettingsTab() {
                 <>
                   <Save className="w-4 h-4" />
                   <span>Salvar URL do Chat</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleSaveChatApiKey}
+              disabled={loadingChatApiKey || savingChatApiKey}
+              className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              {savingChatApiKey ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Salvar API Key do Chat</span>
                 </>
               )}
             </button>
