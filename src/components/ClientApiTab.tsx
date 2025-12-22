@@ -3774,20 +3774,50 @@ export default function ClientApiTab() {
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${
-                  testResponse && (testResponse.includes('"error"') || testResponse.includes('"Error"'))
-                    ? 'bg-red-500 animate-pulse' 
-                    : testResponse
-                    ? 'bg-green-500'
-                    : 'bg-slate-400'
-                }`}></div>
-                <div className="text-base font-bold text-slate-800">
-                  {testResponse 
-                    ? (testResponse.includes('"error"') || testResponse.includes('"Error"')
-                      ? 'Resposta com Erro' 
-                      : 'Resposta de Sucesso')
-                    : 'Aguardando Resposta'}
-                </div>
+                {(() => {
+                  // Lógica especial para endpoint chatwoot-config: considera sucesso se channel_webhook_updated for true
+                  let isError = false;
+                  let isSuccess = false;
+                  
+                  if (testResponse) {
+                    try {
+                      const parsed = JSON.parse(testResponse);
+                      // Para chatwoot-config, verifica se channel_webhook_updated ou webhook_updated_in_chatwoot é true
+                      if (selectedEndpoint === 'chatwoot-config' && parsed.webhook_url) {
+                        const webhookUpdated = parsed.webhook_updated_in_chatwoot === true || parsed.channel_webhook_updated === true;
+                        isSuccess = webhookUpdated;
+                        isError = !webhookUpdated && (parsed.webhook_update_error || parsed.channel_update_error);
+                      } else {
+                        // Para outros endpoints, verifica se tem "error" na resposta
+                        isError = testResponse.includes('"error"') || testResponse.includes('"Error"');
+                        isSuccess = !isError;
+                      }
+                    } catch {
+                      // Se não for JSON válido, usa lógica padrão
+                      isError = testResponse.includes('"error"') || testResponse.includes('"Error"');
+                      isSuccess = !isError;
+                    }
+                  }
+                  
+                  return (
+                    <>
+                      <div className={`w-3 h-3 rounded-full ${
+                        isError
+                          ? 'bg-red-500 animate-pulse' 
+                          : isSuccess
+                          ? 'bg-green-500'
+                          : 'bg-slate-400'
+                      }`}></div>
+                      <div className="text-base font-bold text-slate-800">
+                        {testResponse 
+                          ? (isError
+                            ? 'Resposta com Erro' 
+                            : 'Resposta de Sucesso')
+                          : 'Aguardando Resposta'}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
               {testResponse && (
                 <button
