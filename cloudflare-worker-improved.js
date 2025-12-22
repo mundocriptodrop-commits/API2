@@ -536,23 +536,42 @@ async function handleRequest(request, env = {}, ctx) {
     );
   }
 
-  // Verifica se é webhook do Chatwoot (não requer token no header)
+  // Normaliza o path primeiro para verificar endpoints especiais
   const url = new URL(request.url);
-  let pathForWebhookCheck = url.pathname;
-  if (pathForWebhookCheck.startsWith('/whatsapp/')) {
-    pathForWebhookCheck = pathForWebhookCheck.replace('/whatsapp/', '/');
+  let normalizedPath = url.pathname;
+  
+  // Remove /whatsapp/ se existir
+  if (normalizedPath.startsWith('/whatsapp/')) {
+    normalizedPath = normalizedPath.replace('/whatsapp/', '/');
   }
-  const isChatwootWebhook = pathForWebhookCheck.startsWith('/chatwoot/webhook/');
+  
+  // Remove /functions/v1/ se existir
+  if (normalizedPath.startsWith('/functions/v1/')) {
+    normalizedPath = normalizedPath.replace('/functions/v1/', '/');
+  }
+  
+  // Remove trailing slash
+  if (normalizedPath.endsWith('/') && normalizedPath.length > 1) {
+    normalizedPath = normalizedPath.slice(0, -1);
+  }
+  
+  // Verifica se é webhook do Chatwoot ou endpoint de criação de inbox (não requer token no header)
+  const isChatwootWebhook = normalizedPath.startsWith('/chatwoot/webhook/');
+  const isChatwootCreateInbox = normalizedPath === '/chatwoot/create-inbox' && request.method === 'POST';
   
   if (isChatwootWebhook) {
-    console.log(`[INFO] Detected Chatwoot webhook - path: ${pathForWebhookCheck}, original: ${url.pathname}`);
+    console.log(`[INFO] Detected Chatwoot webhook - path: ${normalizedPath}, original: ${url.pathname}`);
+  }
+  
+  if (isChatwootCreateInbox) {
+    console.log(`[INFO] Detected Chatwoot create-inbox endpoint - path: ${normalizedPath}, original: ${url.pathname}`);
   }
 
-  // Extrai token do header (webhooks do Chatwoot não enviam token)
+  // Extrai token do header (webhooks do Chatwoot e create-inbox não enviam token)
   const token = request.headers.get('token');
 
-  if (!token && !isChatwootWebhook) {
-    console.log(`[WARN] Token missing and not a Chatwoot webhook - path: ${pathForWebhookCheck}`);
+  if (!token && !isChatwootWebhook && !isChatwootCreateInbox) {
+    console.log(`[WARN] Token missing and not a Chatwoot webhook/create-inbox - path: ${pathForWebhookCheck}`);
     return new Response(
       JSON.stringify({ error: 'Token is required in header' }),
       {
@@ -565,10 +584,16 @@ async function handleRequest(request, env = {}, ctx) {
   if (isChatwootWebhook) {
     console.log(`[INFO] Chatwoot webhook detected - skipping token validation`);
   }
+  
+  if (isChatwootCreateInbox) {
+    console.log(`[INFO] Chatwoot create-inbox detected - skipping token validation`);
+  }
 
   // Rate Limiting - Verificar antes de processar (após validar que token existe)
   // Isso protege contra abuso mesmo com tokens inválidos
-  const rateLimit = await checkRateLimit(request, token, RATE_LIMIT_REQUESTS_PER_MINUTE, DEBUG_MODE);
+  // Para create-inbox, usa um token fictício para rate limiting (baseado em IP)
+  const rateLimitToken = isChatwootCreateInbox ? 'create-inbox' : token;
+  const rateLimit = await checkRateLimit(request, rateLimitToken, RATE_LIMIT_REQUESTS_PER_MINUTE, DEBUG_MODE);
   
   if (!rateLimit.allowed) {
     return new Response(
@@ -595,8 +620,8 @@ async function handleRequest(request, env = {}, ctx) {
 
   // Valida token no banco de dados
   // Esta função suporta QUALQUER token de QUALQUER instância
-  // Webhooks do Chatwoot não requerem validação de token aqui
-  if (!isChatwootWebhook && token) {
+  // Webhooks do Chatwoot e create-inbox não requerem validação de token aqui
+  if (!isChatwootWebhook && !isChatwootCreateInbox && token) {
   console.log(`[INFO] Starting token validation for token: ${token.substring(0, 20)}...`);
   }
   const validationStartTime = Date.now();
@@ -607,6 +632,10 @@ async function handleRequest(request, env = {}, ctx) {
       // Para webhooks, vamos validar depois quando extrairmos o instance_id
       validation = { valid: true, skip: true };
       console.log(`[INFO] Skipping token validation for Chatwoot webhook`);
+    } else if (isChatwootCreateInbox) {
+      // Para create-inbox, não precisa validar token (usa credenciais do Chatwoot no body)
+      validation = { valid: true, skip: true };
+      console.log(`[INFO] Skipping token validation for Chatwoot create-inbox`);
     } else {
     validation = await validateToken(token, SUPABASE_URL, SUPABASE_ANON_KEY, DEBUG_MODE, TOKEN_CACHE);
     const validationDuration = Date.now() - validationStartTime;
@@ -666,30 +695,8 @@ async function handleRequest(request, env = {}, ctx) {
 
   // Token válido ou webhook! Processa a requisição
   try {
-    const url = new URL(request.url);
-    
-    // Extrai o path e normaliza para ambos os endpoints
-    let path = url.pathname;
-    
-    // Log do path original
-    if (DEBUG_MODE) {
-      console.log(`[DEBUG] Original request path: ${path}`);
-    }
-    
-    // Remove /whatsapp/ se existir (formato do Cloudflare Worker: /whatsapp/send-text)
-    if (path.startsWith('/whatsapp/')) {
-      path = path.replace('/whatsapp/', '/');
-    }
-    
-    // Remove /functions/v1/ se já estiver presente (caso chamada direta)
-    if (path.startsWith('/functions/v1/')) {
-      path = path.replace('/functions/v1/', '/');
-    }
-    
-    // Remove trailing slash
-    if (path.endsWith('/') && path.length > 1) {
-      path = path.slice(0, -1);
-    }
+    // Usa o path já normalizado do início
+    let path = normalizedPath;
     
     // Se não começar com /, adiciona
     if (!path.startsWith('/')) {
@@ -703,9 +710,7 @@ async function handleRequest(request, env = {}, ctx) {
     const isInstanceOrProfileEndpoint = path.startsWith('/instance/') || path.startsWith('/profile/');
     const isIntegrationEndpoint = path.startsWith('/chatwoot/');
     
-    // Verifica se é um endpoint suportado
-    // Webhook do Chatwoot tem formato dinâmico: /chatwoot/webhook/{instance_id}
-    const isChatwootWebhook = path.startsWith('/chatwoot/webhook/');
+    // Nota: isChatwootWebhook e isChatwootCreateInbox já foram definidos no início usando normalizedPath
     const supportedEndpoints = [
       // Envio de mensagens
       '/send-text', '/send-media', '/send-menu', '/send-carousel', '/send-pix-button', '/send-status',
@@ -1139,13 +1144,15 @@ async function handleRequest(request, env = {}, ctx) {
     
     // Endpoint especial para criar inbox no Chatwoot (não precisa de token de instância)
     if (path === '/chatwoot/create-inbox' && request.method === 'POST') {
+      let createInboxUrl = '';
       try {
         // Valida campos obrigatórios
         if (!bodyData.chat_url || !bodyData.chat_api_key || !bodyData.chat_account_id || !bodyData.instance_name) {
           return new Response(
             JSON.stringify({
               error: 'Missing required fields',
-              required: ['chat_url', 'chat_api_key', 'chat_account_id', 'instance_name']
+              required: ['chat_url', 'chat_api_key', 'chat_account_id', 'instance_name'],
+              received: Object.keys(bodyData)
             }),
             {
               status: 400,
@@ -1158,9 +1165,24 @@ async function handleRequest(request, env = {}, ctx) {
           ? bodyData.chat_url.slice(0, -1) 
           : bodyData.chat_url;
         
-        const createInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.chat_account_id}/inboxes`;
+        createInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.chat_account_id}/inboxes`;
         
         console.log(`[INFO] Creating Chatwoot inbox: ${createInboxUrl}`);
+        console.log(`[INFO] Account ID: ${bodyData.chat_account_id}`);
+        console.log(`[INFO] Instance name: ${bodyData.instance_name}`);
+        console.log(`[INFO] API Key preview: ${bodyData.chat_api_key ? bodyData.chat_api_key.substring(0, 10) + '...' : 'MISSING'}`);
+        
+        console.log(`[INFO] Request payload:`, JSON.stringify({
+          name: bodyData.instance_name,
+          greeting_enabled: false,
+          enable_email_collect: true,
+          csat_survey_enabled: false,
+          enable_auto_assignment: true,
+          working_hours_enabled: false,
+          allow_messages_after_resolved: true,
+          lock_to_single_conversation: false,
+          sender_name_type: 'friendly',
+        }));
         
         const inboxResponse = await fetch(createInboxUrl, {
           method: 'POST',
@@ -1180,6 +1202,9 @@ async function handleRequest(request, env = {}, ctx) {
             sender_name_type: 'friendly',
           }),
         });
+
+        console.log(`[INFO] Chatwoot response status: ${inboxResponse.status}`);
+        console.log(`[INFO] Chatwoot response headers:`, Object.fromEntries(inboxResponse.headers.entries()));
 
         if (inboxResponse.ok) {
           const inboxData = await inboxResponse.json();
@@ -1201,14 +1226,21 @@ async function handleRequest(request, env = {}, ctx) {
           try {
             errorDetails = JSON.parse(errorText);
           } catch {
-            errorDetails = errorText.substring(0, 500);
+            errorDetails = { message: errorText.substring(0, 500), raw: errorText };
           }
-          console.error(`[ERROR] Failed to create Chatwoot inbox: ${inboxResponse.status}`, errorDetails);
+          console.error(`[ERROR] Failed to create Chatwoot inbox: ${inboxResponse.status}`);
+          console.error(`[ERROR] Error details:`, JSON.stringify(errorDetails, null, 2));
+          console.error(`[ERROR] Request URL: ${createInboxUrl}`);
+          console.error(`[ERROR] Account ID: ${bodyData.chat_account_id}`);
+          console.error(`[ERROR] API Key preview: ${bodyData.chat_api_key ? bodyData.chat_api_key.substring(0, 10) + '...' : 'MISSING'}`);
+          
           return new Response(
             JSON.stringify({
               error: 'Failed to create Chatwoot inbox',
               status: inboxResponse.status,
-              details: errorDetails
+              details: errorDetails,
+              request_url: createInboxUrl,
+              account_id: bodyData.chat_account_id
             }),
             {
               status: inboxResponse.status,
@@ -1218,10 +1250,13 @@ async function handleRequest(request, env = {}, ctx) {
         }
       } catch (error) {
         console.error(`[ERROR] Error creating Chatwoot inbox:`, error);
+        console.error(`[ERROR] Error stack:`, error.stack);
+        console.error(`[ERROR] Request URL: ${createInboxUrl || 'N/A'}`);
         return new Response(
           JSON.stringify({
             error: 'Internal server error while creating Chatwoot inbox',
-            message: error.message
+            message: error.message,
+            stack: DEBUG_MODE ? error.stack : undefined
           }),
           {
             status: 500,

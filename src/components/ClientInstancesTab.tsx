@@ -710,10 +710,19 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               inboxId = inboxData.inbox_id;
               console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
             } else {
-              const errorData = await inboxResponse.json();
+              let errorData;
+              try {
+                errorData = await inboxResponse.json();
+              } catch {
+                const errorText = await inboxResponse.text();
+                errorData = { error: errorText, status: inboxResponse.status };
+              }
               console.error('[CHATWOOT] Erro ao criar inbox:', errorData);
+              console.error('[CHATWOOT] Status:', inboxResponse.status);
+              console.error('[CHATWOOT] Response headers:', Object.fromEntries(inboxResponse.headers.entries()));
               // Não falhar a criação da instância se a inbox falhar
-              showToast('Instância criada, mas não foi possível criar a inbox no Chat. Verifique as configurações.', 'warning');
+              const errorMessage = errorData.details?.message || errorData.error || 'Erro desconhecido';
+              showToast(`Instância criada, mas não foi possível criar a inbox no Chat: ${errorMessage}`, 'warning');
             }
           } catch (chatError: any) {
             console.error('[CHATWOOT] Erro ao criar inbox:', chatError);
