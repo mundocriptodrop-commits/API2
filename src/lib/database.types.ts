@@ -82,6 +82,9 @@ export interface Database {
           email: string
           role: 'admin' | 'client'
           max_instances: number | null
+          chat_url: string | null
+          chat_api_key: string | null
+          chat_account_id: number | null
           created_at: string
           updated_at: string
         }
@@ -90,6 +93,9 @@ export interface Database {
           email: string
           role?: 'admin' | 'client'
           max_instances?: number | null
+          chat_url?: string | null
+          chat_api_key?: string | null
+          chat_account_id?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -98,6 +104,9 @@ export interface Database {
           email?: string
           role?: 'admin' | 'client'
           max_instances?: number | null
+          chat_url?: string | null
+          chat_api_key?: string | null
+          chat_account_id?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -118,6 +127,7 @@ export interface Database {
           last_disconnect_at: string | null
           admin_field_01: string | null
           admin_field_02: string | null
+          chat_enabled: boolean
           created_at: string
           updated_at: string
         }
@@ -136,6 +146,7 @@ export interface Database {
           last_disconnect_at?: string | null
           admin_field_01?: string | null
           admin_field_02?: string | null
+          chat_enabled?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -154,6 +165,7 @@ export interface Database {
           last_disconnect_at?: string | null
           admin_field_01?: string | null
           admin_field_02?: string | null
+          chat_enabled?: boolean
           created_at?: string
           updated_at?: string
         }

@@ -48,6 +48,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   const [pairingCode, setPairingCode] = useState('');
   const [showDisconnectOption, setShowDisconnectOption] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [chatEnabled, setChatEnabled] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({
     show: false,
@@ -113,6 +114,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   const closeCreateModal = () => {
     setShowCreateModal(false);
     setInstanceName('');
+    setChatEnabled(false);
     onCloseCreate?.();
   };
 
@@ -683,6 +685,56 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           initialStatus = response.connected ? 'connected' : 'disconnected';
         }
 
+        let inboxId: number | null = null;
+
+        // Se chat_enabled for true, criar inbox no Chatwoot
+        if (chatEnabled && profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id) {
+          try {
+            const chatwootBaseUrl = profile.chat_url.endsWith('/') 
+              ? profile.chat_url.slice(0, -1) 
+              : profile.chat_url;
+            
+            const createInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${profile.chat_account_id}/inboxes`;
+            
+            const inboxResponse = await fetch(createInboxUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'api_access_token': profile.chat_api_key,
+              },
+              body: JSON.stringify({
+                name: instanceName,
+                greeting_enabled: false,
+                enable_email_collect: true,
+                csat_survey_enabled: false,
+                enable_auto_assignment: true,
+                working_hours_enabled: false,
+                allow_messages_after_resolved: true,
+                lock_to_single_conversation: false,
+                sender_name_type: 'friendly',
+              }),
+            });
+
+            if (inboxResponse.ok) {
+              const inboxData = await inboxResponse.json();
+              inboxId = inboxData.id;
+              console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
+            } else {
+              const errorText = await inboxResponse.text();
+              console.error('[CHATWOOT] Erro ao criar inbox:', errorText);
+              // Não falhar a criação da instância se a inbox falhar
+              showToast('Instância criada, mas não foi possível criar a inbox no Chat. Verifique as configurações.', 'warning');
+            }
+          } catch (chatError: any) {
+            console.error('[CHATWOOT] Erro ao criar inbox:', chatError);
+            // Não falhar a criação da instância se a inbox falhar
+            showToast('Instância criada, mas não foi possível criar a inbox no Chat. Verifique as configurações.', 'warning');
+          }
+        } else if (chatEnabled) {
+          showToast('Instância criada, mas não foi possível criar a inbox. Configure URL, API Key e Account ID do Chat nas configurações.', 'warning');
+        }
+
+        // Salvar inbox_id no admin_field_01 se foi criada
         const { error } = await supabase
           .from('whatsapp_instances')
           .insert({
@@ -691,11 +743,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             instance_token: response.token,
             system_name: 'apilocal',
             status: initialStatus,
+            chat_enabled: chatEnabled,
+            admin_field_01: inboxId ? inboxId.toString() : null, // Salvar inbox_id
           });
 
         if (error) throw error;
 
-        showToast('Instância criada com sucesso!', 'success');
+        if (chatEnabled && inboxId) {
+          showToast('Instância e inbox do Chat criadas com sucesso!', 'success');
+        } else {
+          showToast('Instância criada com sucesso!', 'success');
+        }
         closeCreateModal();
         await loadInstances();
 
@@ -1439,17 +1497,37 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               <h3 className="text-xl font-semibold text-gray-900">Nova Instância</h3>
             </div>
 
-            <div className="p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nome da Instância
-              </label>
-              <input
-                type="text"
-                value={instanceName}
-                onChange={(e) => setInstanceName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="Ex: WhatsApp Vendas"
-              />
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome da Instância
+                </label>
+                <input
+                  type="text"
+                  value={instanceName}
+                  onChange={(e) => setInstanceName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Ex: WhatsApp Vendas"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                <div>
+                  <p className="font-medium text-gray-900">Conectar ao Chat</p>
+                  <p className="text-sm text-gray-500">
+                    Ativar integração com sistema de Chat (configuração para uso futuro)
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={chatEnabled}
+                    onChange={(e) => setChatEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                </label>
+              </div>
             </div>
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">

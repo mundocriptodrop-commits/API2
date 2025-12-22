@@ -15,6 +15,9 @@ export default function ClientSettingsTab() {
   const [chatApiKey, setChatApiKey] = useState('');
   const [loadingChatApiKey, setLoadingChatApiKey] = useState(true);
   const [savingChatApiKey, setSavingChatApiKey] = useState(false);
+  const [chatAccountId, setChatAccountId] = useState('');
+  const [loadingChatAccountId, setLoadingChatAccountId] = useState(true);
+  const [savingChatAccountId, setSavingChatAccountId] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -29,6 +32,7 @@ export default function ClientSettingsTab() {
     if (user?.id) {
       loadChatUrl();
       loadChatApiKey();
+      loadChatAccountId();
     }
   }, [user?.id]);
 
@@ -70,6 +74,25 @@ export default function ClientSettingsTab() {
     }
   }
 
+  async function loadChatAccountId() {
+    try {
+      setLoadingChatAccountId(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('chat_account_id')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      setChatAccountId(data?.chat_account_id?.toString() || '');
+    } catch (error) {
+      console.error('Error loading chat account ID:', error);
+      showToast('Erro ao carregar Account ID do Chat', 'error');
+    } finally {
+      setLoadingChatAccountId(false);
+    }
+  }
+
   async function handleSaveChatUrl() {
     if (!user?.id) return;
 
@@ -107,6 +130,32 @@ export default function ClientSettingsTab() {
       showToast(error.message || 'Erro ao salvar API Key do Chat', 'error');
     } finally {
       setSavingChatApiKey(false);
+    }
+  }
+
+  async function handleSaveChatAccountId() {
+    if (!user?.id) return;
+
+    setSavingChatAccountId(true);
+    try {
+      const accountId = chatAccountId.trim() ? parseInt(chatAccountId.trim(), 10) : null;
+      if (chatAccountId.trim() && isNaN(accountId!)) {
+        showToast('Account ID deve ser um número válido', 'error');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ chat_account_id: accountId })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      showToast('Account ID do Chat salvo com sucesso!', 'success');
+    } catch (error: any) {
+      console.error('Error saving chat account ID:', error);
+      showToast(error.message || 'Erro ao salvar Account ID do Chat', 'error');
+    } finally {
+      setSavingChatAccountId(false);
     }
   }
 
@@ -264,6 +313,23 @@ export default function ClientSettingsTab() {
             </p>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Account ID do Chat
+            </label>
+            <input
+              type="number"
+              value={chatAccountId}
+              onChange={(e) => setChatAccountId(e.target.value)}
+              placeholder="1"
+              disabled={loadingChatAccountId || savingChatAccountId}
+              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              ID numérico da conta no sistema de Chat (visível na URL da conta)
+            </p>
+          </div>
+
           <div className="pt-4 border-t border-gray-200 space-y-3">
             <button
               onClick={handleSaveChatUrl}
@@ -297,6 +363,24 @@ export default function ClientSettingsTab() {
                 <>
                   <Save className="w-4 h-4" />
                   <span>Salvar API Key do Chat</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleSaveChatAccountId}
+              disabled={loadingChatAccountId || savingChatAccountId}
+              className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              {savingChatAccountId ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Salvar Account ID do Chat</span>
                 </>
               )}
             </button>
