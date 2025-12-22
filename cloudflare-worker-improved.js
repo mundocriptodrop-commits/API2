@@ -2130,6 +2130,72 @@ async function handleRequest(request, env = {}, ctx) {
                responseJson = replaceWebhookUrls(responseJson);
                console.log(`[INFO] Applied final recursive URL replacement after Chatwoot update attempt`);
                
+               // UPDATE ADICIONAL: Faz update do channel sempre que possível (mesmo se webhook_updated_in_chatwoot for false)
+               // Isso garante que o webhook_url seja atualizado no channel mesmo quando o webhook já existe
+               if (response.ok && 
+                   responseJson.webhook_url && 
+                   bodyData && 
+                   bodyData.url && 
+                   bodyData.access_token && 
+                   bodyData.account_id && 
+                   bodyData.inbox_id) {
+                 try {
+                   console.log(`[INFO] Webhook atualizado com sucesso, fazendo update adicional do channel...`);
+                   const chatwootBaseUrl = bodyData.url.endsWith('/') ? bodyData.url.slice(0, -1) : bodyData.url;
+                   const channelUpdateUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.account_id}/inboxes/${bodyData.inbox_id}`;
+                   
+                   const channelUpdateResponse = await fetch(channelUpdateUrl, {
+                     method: 'PATCH',
+                     headers: {
+                       'Content-Type': 'application/json',
+                       'api_access_token': bodyData.access_token,
+                     },
+                     body: JSON.stringify({
+                       channel: {
+                         webhook_url: responseJson.webhook_url
+                       }
+                     }),
+                   });
+                   
+                   if (channelUpdateResponse.ok) {
+                     const channelUpdateData = await channelUpdateResponse.json();
+                     responseJson.channel_update_response = channelUpdateData;
+                     console.log(`[INFO] ✅ Channel atualizado com sucesso via PATCH /inboxes/{id}`);
+                     
+                     // Verifica se o webhook_url foi realmente atualizado no channel
+                     if (channelUpdateData.channel && channelUpdateData.channel.webhook_url === responseJson.webhook_url) {
+                       responseJson.channel_webhook_updated = true;
+                       console.log(`[INFO] ✅ Channel webhook_url confirmado: ${channelUpdateData.channel.webhook_url}`);
+                     } else if (channelUpdateData.webhook_url === responseJson.webhook_url) {
+                       // Pode estar no nível raiz também
+                       responseJson.channel_webhook_updated = true;
+                       console.log(`[INFO] ✅ Channel webhook_url confirmado (nível raiz): ${channelUpdateData.webhook_url}`);
+                     } else {
+                       console.log(`[WARN] Channel PATCH retornou OK mas webhook_url não foi atualizado. Response: ${JSON.stringify(channelUpdateData).substring(0, 200)}`);
+                     }
+                   } else {
+                     const errorText = await channelUpdateResponse.text();
+                     let errorDetails;
+                     try {
+                       errorDetails = JSON.parse(errorText);
+                     } catch {
+                       errorDetails = errorText.substring(0, 200);
+                     }
+                     responseJson.channel_update_error = {
+                       error: `HTTP ${channelUpdateResponse.status}`,
+                       details: errorDetails
+                     };
+                     console.log(`[WARN] Falha ao atualizar channel: ${channelUpdateResponse.status} - ${JSON.stringify(errorDetails)}`);
+                   }
+                 } catch (channelUpdateError) {
+                   responseJson.channel_update_error = {
+                     error: 'Erro ao tentar atualizar channel',
+                     message: channelUpdateError.message
+                   };
+                   console.error(`[ERROR] Erro ao atualizar channel: ${channelUpdateError.message}`);
+                 }
+               }
+               
                // Atualiza responseData com o resultado da atualização do Chatwoot
                responseData = JSON.stringify(responseJson);
             } catch (chatwootError) {

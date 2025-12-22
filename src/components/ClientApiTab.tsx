@@ -3823,8 +3823,11 @@ export default function ClientApiTab() {
                         const parsed = JSON.parse(testResponse);
                         // Se for resposta do Chatwoot e tiver webhook_url, destaca
                         if (selectedEndpoint === 'chatwoot-config' && parsed.webhook_url) {
-                          const webhookUpdated = parsed.webhook_updated_in_chatwoot === true;
+                          // Considera sucesso se webhook_updated_in_chatwoot OU channel_webhook_updated for true
+                          const webhookUpdated = parsed.webhook_updated_in_chatwoot === true || parsed.channel_webhook_updated === true;
                           const webhookUpdateError = parsed.webhook_update_error;
+                          const channelUpdateError = parsed.channel_update_error;
+                          const hasAnyError = webhookUpdateError && !webhookUpdated; // Só mostra erro se não teve sucesso
                           
                           return (
                             <div className="space-y-4">
@@ -3864,10 +3867,17 @@ export default function ClientApiTab() {
                                   </button>
                                 </div>
                                 {webhookUpdated ? (
-                                  <p className="text-xs text-green-300/70 mt-2">
-                                    ✅ Webhook atualizado automaticamente no Chatwoot! A integração está pronta para uso.
-                                  </p>
-                                ) : webhookUpdateError ? (
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-xs text-green-300/70">
+                                      ✅ Webhook atualizado automaticamente no Chatwoot! A integração está pronta para uso.
+                                    </p>
+                                    {parsed.channel_webhook_updated === true && parsed.webhook_updated_in_chatwoot !== true && (
+                                      <p className="text-xs text-green-300/50 italic">
+                                        (Atualizado via channel update)
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : hasAnyError ? (
                                   <div className="mt-2 space-y-2">
                                     <p className="text-xs text-yellow-300/70">
                                       ⚠️ Não foi possível atualizar automaticamente o webhook no Chatwoot.
@@ -3875,12 +3885,14 @@ export default function ClientApiTab() {
                                     <p className="text-xs text-yellow-300/70">
                                       Por favor, copie a URL acima e cole manualmente no campo "URL do webhook" nas configurações da inbox no Chatwoot.
                                     </p>
-                                    <details className="text-xs text-red-300/70 mt-2">
-                                      <summary className="cursor-pointer hover:text-red-300 mb-1">Detalhes do erro (clique para expandir)</summary>
-                                      <pre className="bg-slate-900/50 p-2 rounded mt-1 overflow-x-auto text-[10px]">
-                                        {JSON.stringify(webhookUpdateError, null, 2)}
-                                      </pre>
-                                    </details>
+                                    {(webhookUpdateError || channelUpdateError) && (
+                                      <details className="text-xs text-red-300/70 mt-2">
+                                        <summary className="cursor-pointer hover:text-red-300 mb-1">Detalhes do erro (clique para expandir)</summary>
+                                        <pre className="bg-slate-900/50 p-2 rounded mt-1 overflow-x-auto text-[10px]">
+                                          {JSON.stringify(webhookUpdateError || channelUpdateError, null, 2)}
+                                        </pre>
+                                      </details>
+                                    )}
                                   </div>
                                 ) : (
                                   <p className="text-xs text-blue-300/70 mt-2">
