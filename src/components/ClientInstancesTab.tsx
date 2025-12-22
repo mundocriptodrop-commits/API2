@@ -726,13 +726,59 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             if (inboxResponse.ok) {
               const inboxData = await inboxResponse.json();
               inboxId = inboxData.inbox_id;
-              console.log('[CHATWOOT] Inbox criada e webhook configurado com sucesso:', inboxData);
+              console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
               
               // Atualizar a instância com o inbox_id
               await supabase
                 .from('whatsapp_instances')
                 .update({ admin_field_01: inboxId.toString() })
                 .eq('id', newInstanceData.id);
+              
+              // Agora configurar a integração completa via /chatwoot/config
+              // Isso é necessário para que o webhook funcione corretamente
+              try {
+                console.log('[CHATWOOT] Configurando integração completa via /chatwoot/config...');
+                const configResponse = await fetch(`${API_BASE_URL}/chatwoot/config`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'token': response.token, // Token da instância para autenticação
+                  },
+                  body: JSON.stringify({
+                    enabled: true,
+                    url: profile.chat_url,
+                    access_token: profile.chat_api_key,
+                    account_id: profile.chat_account_id,
+                    inbox_id: inboxId,
+                    ignore_groups: false,
+                    sign_messages: true,
+                    create_new_conversation: false,
+                  }),
+                });
+                
+                if (configResponse.ok) {
+                  const configData = await configResponse.json();
+                  console.log('[CHATWOOT] Integração configurada com sucesso:', configData);
+                  
+                  // Verifica se o webhook foi configurado
+                  if (configData.webhook_url || configData.channel_webhook_updated || configData.webhook_updated_in_chatwoot) {
+                    console.log('[CHATWOOT] ✅ Webhook configurado automaticamente via /chatwoot/config');
+                  }
+                } else {
+                  const configErrorText = await configResponse.text();
+                  let configErrorData;
+                  try {
+                    configErrorData = JSON.parse(configErrorText);
+                  } catch {
+                    configErrorData = { error: configErrorText, status: configResponse.status };
+                  }
+                  console.error('[CHATWOOT] Erro ao configurar integração:', configErrorData);
+                  showToast('Inbox criada, mas houve erro ao configurar a integração. Verifique os logs.', 'warning');
+                }
+              } catch (configError: any) {
+                console.error('[CHATWOOT] Erro ao chamar /chatwoot/config:', configError);
+                showToast('Inbox criada, mas houve erro ao configurar a integração. Verifique os logs.', 'warning');
+              }
             } else {
               let errorData;
               try {
