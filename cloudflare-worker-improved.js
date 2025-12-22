@@ -715,7 +715,7 @@ async function handleRequest(request, env = {}, ctx) {
       '/instance/connect', '/instance/disconnect', '/instance/status', '/instance/updateInstanceName', 
       '/instance', '/instance/privacy', '/instance/presence',
       // Integrações
-      '/chatwoot/config'
+      '/chatwoot/config', '/chatwoot/create-inbox'
     ];
     
     // Se for webhook do Chatwoot, trata antes de verificar endpoints suportados
@@ -1137,6 +1137,100 @@ async function handleRequest(request, env = {}, ctx) {
       }
     }
     
+    // Endpoint especial para criar inbox no Chatwoot (não precisa de token de instância)
+    if (path === '/chatwoot/create-inbox' && request.method === 'POST') {
+      try {
+        // Valida campos obrigatórios
+        if (!bodyData.chat_url || !bodyData.chat_api_key || !bodyData.chat_account_id || !bodyData.instance_name) {
+          return new Response(
+            JSON.stringify({
+              error: 'Missing required fields',
+              required: ['chat_url', 'chat_api_key', 'chat_account_id', 'instance_name']
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        const chatwootBaseUrl = bodyData.chat_url.endsWith('/') 
+          ? bodyData.chat_url.slice(0, -1) 
+          : bodyData.chat_url;
+        
+        const createInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.chat_account_id}/inboxes`;
+        
+        console.log(`[INFO] Creating Chatwoot inbox: ${createInboxUrl}`);
+        
+        const inboxResponse = await fetch(createInboxUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api_access_token': bodyData.chat_api_key,
+          },
+          body: JSON.stringify({
+            name: bodyData.instance_name,
+            greeting_enabled: false,
+            enable_email_collect: true,
+            csat_survey_enabled: false,
+            enable_auto_assignment: true,
+            working_hours_enabled: false,
+            allow_messages_after_resolved: true,
+            lock_to_single_conversation: false,
+            sender_name_type: 'friendly',
+          }),
+        });
+
+        if (inboxResponse.ok) {
+          const inboxData = await inboxResponse.json();
+          console.log(`[INFO] Chatwoot inbox created successfully: ${inboxData.id}`);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              inbox_id: inboxData.id,
+              inbox: inboxData
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        } else {
+          const errorText = await inboxResponse.text();
+          let errorDetails;
+          try {
+            errorDetails = JSON.parse(errorText);
+          } catch {
+            errorDetails = errorText.substring(0, 500);
+          }
+          console.error(`[ERROR] Failed to create Chatwoot inbox: ${inboxResponse.status}`, errorDetails);
+          return new Response(
+            JSON.stringify({
+              error: 'Failed to create Chatwoot inbox',
+              status: inboxResponse.status,
+              details: errorDetails
+            }),
+            {
+              status: inboxResponse.status,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      } catch (error) {
+        console.error(`[ERROR] Error creating Chatwoot inbox:`, error);
+        return new Response(
+          JSON.stringify({
+            error: 'Internal server error while creating Chatwoot inbox',
+            message: error.message
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
     // Para endpoints de integração Chatwoot, adiciona webhook_url customizado no body antes de enviar para UAZAPI
     // Isso garante que quando a UAZAPI configurar o webhook no Chatwoot, use a URL correta do nosso domínio
     if (isIntegrationEndpoint && path === '/chatwoot/config' && bodyData && Object.keys(bodyData).length > 0 && validation && validation.instance) {

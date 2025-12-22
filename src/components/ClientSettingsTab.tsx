@@ -5,7 +5,7 @@ import { User, Mail, Key, Shield, Bell, MessageSquare, Save } from 'lucide-react
 import ToastContainer, { type ToastMessage } from './ToastContainer';
 
 export default function ClientSettingsTab() {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [notifications, setNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
@@ -117,6 +117,10 @@ export default function ClientSettingsTab() {
         .eq('id', user.id);
 
       if (error) throw error;
+      
+      // Recarrega o profile para ter os valores atualizados disponíveis
+      await refreshProfile();
+      
       showToast('Configurações de integração salvas com sucesso!', 'success');
     } catch (error: any) {
       console.error('Error saving integrations:', error);

@@ -687,41 +687,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
         let inboxId: number | null = null;
 
-        // Se chat_enabled for true, criar inbox no Chatwoot
+        // Se chat_enabled for true, criar inbox no Chatwoot via backend (evita CORS)
         if (chatEnabled && profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id) {
           try {
-            const chatwootBaseUrl = profile.chat_url.endsWith('/') 
-              ? profile.chat_url.slice(0, -1) 
-              : profile.chat_url;
+            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.evasend.com.br/whatsapp';
             
-            const createInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${profile.chat_account_id}/inboxes`;
-            
-            const inboxResponse = await fetch(createInboxUrl, {
+            const inboxResponse = await fetch(`${API_BASE_URL}/chatwoot/create-inbox`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'api_access_token': profile.chat_api_key,
               },
               body: JSON.stringify({
-                name: instanceName,
-                greeting_enabled: false,
-                enable_email_collect: true,
-                csat_survey_enabled: false,
-                enable_auto_assignment: true,
-                working_hours_enabled: false,
-                allow_messages_after_resolved: true,
-                lock_to_single_conversation: false,
-                sender_name_type: 'friendly',
+                chat_url: profile.chat_url,
+                chat_api_key: profile.chat_api_key,
+                chat_account_id: profile.chat_account_id,
+                instance_name: instanceName,
               }),
             });
 
             if (inboxResponse.ok) {
               const inboxData = await inboxResponse.json();
-              inboxId = inboxData.id;
+              inboxId = inboxData.inbox_id;
               console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
             } else {
-              const errorText = await inboxResponse.text();
-              console.error('[CHATWOOT] Erro ao criar inbox:', errorText);
+              const errorData = await inboxResponse.json();
+              console.error('[CHATWOOT] Erro ao criar inbox:', errorData);
               // Não falhar a criação da instância se a inbox falhar
               showToast('Instância criada, mas não foi possível criar a inbox no Chat. Verifique as configurações.', 'warning');
             }
