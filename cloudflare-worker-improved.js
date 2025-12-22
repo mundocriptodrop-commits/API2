@@ -1172,17 +1172,17 @@ async function handleRequest(request, env = {}, ctx) {
         console.log(`[INFO] Instance name: ${bodyData.instance_name}`);
         console.log(`[INFO] API Key preview: ${bodyData.chat_api_key ? bodyData.chat_api_key.substring(0, 10) + '...' : 'MISSING'}`);
         
-        console.log(`[INFO] Request payload:`, JSON.stringify({
+        // Payload para criar inbox no Chatwoot
+        // Para inboxes de API (WhatsApp), precisamos especificar o channel type
+        // Baseado na documentação do Chatwoot, o mínimo necessário é name e channel.type
+        const inboxPayload = {
           name: bodyData.instance_name,
-          greeting_enabled: false,
-          enable_email_collect: true,
-          csat_survey_enabled: false,
-          enable_auto_assignment: true,
-          working_hours_enabled: false,
-          allow_messages_after_resolved: true,
-          lock_to_single_conversation: false,
-          sender_name_type: 'friendly',
-        }));
+          channel: {
+            type: 'api' // Tipo de channel para integração via API (WhatsApp)
+          }
+        };
+        
+        console.log(`[INFO] Request payload:`, JSON.stringify(inboxPayload, null, 2));
         
         const inboxResponse = await fetch(createInboxUrl, {
           method: 'POST',
@@ -1190,17 +1190,7 @@ async function handleRequest(request, env = {}, ctx) {
             'Content-Type': 'application/json',
             'api_access_token': bodyData.chat_api_key,
           },
-          body: JSON.stringify({
-            name: bodyData.instance_name,
-            greeting_enabled: false,
-            enable_email_collect: true,
-            csat_survey_enabled: false,
-            enable_auto_assignment: true,
-            working_hours_enabled: false,
-            allow_messages_after_resolved: true,
-            lock_to_single_conversation: false,
-            sender_name_type: 'friendly',
-          }),
+          body: JSON.stringify(inboxPayload),
         });
 
         console.log(`[INFO] Chatwoot response status: ${inboxResponse.status}`);
