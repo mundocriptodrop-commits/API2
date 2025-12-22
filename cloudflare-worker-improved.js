@@ -1161,6 +1161,9 @@ async function handleRequest(request, env = {}, ctx) {
           );
         }
 
+        // instance_id é opcional, mas necessário para configurar webhook automaticamente
+        const instanceId = bodyData.instance_id;
+
         const chatwootBaseUrl = bodyData.chat_url.endsWith('/') 
           ? bodyData.chat_url.slice(0, -1) 
           : bodyData.chat_url;
@@ -1199,11 +1202,95 @@ async function handleRequest(request, env = {}, ctx) {
         if (inboxResponse.ok) {
           const inboxData = await inboxResponse.json();
           console.log(`[INFO] Chatwoot inbox created successfully: ${inboxData.id}`);
+          
+          // Se instance_id foi fornecido, configurar webhook automaticamente
+          if (instanceId) {
+            try {
+              const webhookUrl = `https://api.evasend.com.br/whatsapp/chatwoot/webhook/${instanceId}`;
+              const updateInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.chat_account_id}/inboxes/${inboxData.id}`;
+              
+              console.log(`[INFO] Configurando webhook automaticamente: ${webhookUrl}`);
+              
+              const updateResponse = await fetch(updateInboxUrl, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'api_access_token': bodyData.chat_api_key,
+                },
+                body: JSON.stringify({
+                  channel: {
+                    webhook_url: webhookUrl
+                  }
+                }),
+              });
+
+              if (updateResponse.ok) {
+                const updateData = await updateResponse.json();
+                console.log(`[INFO] Webhook configurado com sucesso na inbox: ${inboxData.id}`);
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    inbox_id: inboxData.id,
+                    inbox: inboxData,
+                    webhook_configured: true,
+                    webhook_url: webhookUrl
+                  }),
+                  {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                  }
+                );
+              } else {
+                const updateErrorText = await updateResponse.text();
+                let updateErrorDetails;
+                try {
+                  updateErrorDetails = JSON.parse(updateErrorText);
+                } catch {
+                  updateErrorDetails = { message: updateErrorText.substring(0, 500) };
+                }
+                console.warn(`[WARN] Inbox criada mas webhook não foi configurado: ${updateResponse.status}`, updateErrorDetails);
+                // Retorna sucesso mesmo se webhook falhar (inbox foi criada)
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    inbox_id: inboxData.id,
+                    inbox: inboxData,
+                    webhook_configured: false,
+                    webhook_error: updateErrorDetails
+                  }),
+                  {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                  }
+                );
+              }
+            } catch (webhookError) {
+              console.error(`[ERROR] Erro ao configurar webhook:`, webhookError);
+              // Retorna sucesso mesmo se webhook falhar (inbox foi criada)
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  inbox_id: inboxData.id,
+                  inbox: inboxData,
+                  webhook_configured: false,
+                  webhook_error: { message: webhookError.message }
+                }),
+                {
+                  status: 200,
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                }
+              );
+            }
+          }
+          
+          // Se não tem instance_id, retorna sucesso sem configurar webhook
           return new Response(
             JSON.stringify({
               success: true,
               inbox_id: inboxData.id,
-              inbox: inboxData
+              inbox: inboxData,
+              webhook_configured: false,
+              note: 'Instance ID not provided, webhook not configured'
             }),
             {
               status: 200,

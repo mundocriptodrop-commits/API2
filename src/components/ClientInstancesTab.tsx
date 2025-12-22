@@ -685,10 +685,27 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           initialStatus = response.connected ? 'connected' : 'disconnected';
         }
 
+        // Primeiro, salvar a instância no banco para obter o instance_id
+        const { data: newInstanceData, error } = await supabase
+          .from('whatsapp_instances')
+          .insert({
+            user_id: user?.id || '',
+            name: instanceName,
+            instance_token: response.token,
+            system_name: 'apilocal',
+            status: initialStatus,
+            chat_enabled: chatEnabled,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
         let inboxId: number | null = null;
 
         // Se chat_enabled for true, criar inbox no Chatwoot via backend (evita CORS)
-        if (chatEnabled && profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id) {
+        // Agora temos o instance_id para configurar o webhook automaticamente
+        if (chatEnabled && profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id && newInstanceData?.id) {
           try {
             const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.evasend.com.br/whatsapp';
             
@@ -702,13 +719,20 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                 chat_api_key: profile.chat_api_key,
                 chat_account_id: profile.chat_account_id,
                 instance_name: instanceName,
+                instance_id: newInstanceData.id, // Passar instance_id para configurar webhook
               }),
             });
 
             if (inboxResponse.ok) {
               const inboxData = await inboxResponse.json();
               inboxId = inboxData.inbox_id;
-              console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
+              console.log('[CHATWOOT] Inbox criada e webhook configurado com sucesso:', inboxData);
+              
+              // Atualizar a instância com o inbox_id
+              await supabase
+                .from('whatsapp_instances')
+                .update({ admin_field_01: inboxId.toString() })
+                .eq('id', newInstanceData.id);
             } else {
               let errorData;
               try {
@@ -733,23 +757,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           showToast('Instância criada, mas não foi possível criar a inbox. Configure URL, API Key e Account ID do Chat nas configurações.', 'warning');
         }
 
-        // Salvar inbox_id no admin_field_01 se foi criada
-        const { error } = await supabase
-          .from('whatsapp_instances')
-          .insert({
-            user_id: user?.id || '',
-            name: instanceName,
-            instance_token: response.token,
-            system_name: 'apilocal',
-            status: initialStatus,
-            chat_enabled: chatEnabled,
-            admin_field_01: inboxId ? inboxId.toString() : null, // Salvar inbox_id
-          });
-
-        if (error) throw error;
-
         if (chatEnabled && inboxId) {
-          showToast('Instância e inbox do Chat criadas com sucesso!', 'success');
+          showToast('Instância e inbox do Chat criadas com sucesso! Webhook configurado automaticamente.', 'success');
         } else {
           showToast('Instância criada com sucesso!', 'success');
         }
