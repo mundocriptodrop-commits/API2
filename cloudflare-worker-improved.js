@@ -1210,8 +1210,7 @@ async function handleRequest(request, env = {}, ctx) {
           );
         }
 
-        // instance_id é opcional, mas necessário para configurar webhook automaticamente
-        const instanceId = bodyData.instance_id;
+        // instance_id não é mais necessário aqui - a configuração do webhook será feita via /chatwoot/config após a conexão
 
         const chatwootBaseUrl = bodyData.chat_url.endsWith('/') 
           ? bodyData.chat_url.slice(0, -1) 
@@ -1252,198 +1251,16 @@ async function handleRequest(request, env = {}, ctx) {
           const inboxData = await inboxResponse.json();
           console.log(`[INFO] Chatwoot inbox created successfully: ${inboxData.id}`);
           
-          // Se instance_id foi fornecido, configurar webhook automaticamente
-          if (instanceId) {
-            try {
-              const webhookUrl = `https://api.evasend.com.br/whatsapp/chatwoot/webhook/${instanceId}`;
-              
-              console.log(`[INFO] Configurando webhook automaticamente: ${webhookUrl}`);
-              
-              // Tenta múltiplas estratégias para configurar o webhook
-              let webhookConfigured = false;
-              let webhookError = null;
-              
-              // ESTRATÉGIA 1: Tentar atualizar via PATCH na inbox (channel.webhook_url)
-              try {
-                const updateInboxUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.chat_account_id}/inboxes/${inboxData.id}`;
-                
-                const updateResponse = await fetch(updateInboxUrl, {
-                  method: 'PATCH',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'api_access_token': bodyData.chat_api_key,
-                  },
-                  body: JSON.stringify({
-                    channel: {
-                      webhook_url: webhookUrl
-                    }
-                  }),
-                });
-
-                if (updateResponse.ok) {
-                  const updateData = await updateResponse.json();
-                  // Verifica se o webhook_url foi realmente atualizado
-                  if (updateData.channel && updateData.channel.webhook_url === webhookUrl) {
-                    webhookConfigured = true;
-                    console.log(`[INFO] ✅ Webhook configurado via PATCH inbox (channel.webhook_url)`);
-                  } else if (updateData.webhook_url === webhookUrl) {
-                    webhookConfigured = true;
-                    console.log(`[INFO] ✅ Webhook configurado via PATCH inbox (webhook_url raiz)`);
-                  } else {
-                    console.log(`[WARN] PATCH retornou OK mas webhook_url não foi atualizado. Tentando estratégia alternativa...`);
-                  }
-                } else {
-                  const updateErrorText = await updateResponse.text();
-                  console.log(`[WARN] PATCH inbox falhou (${updateResponse.status}), tentando estratégia alternativa...`);
-                }
-              } catch (patchError) {
-                console.log(`[WARN] Erro ao tentar PATCH inbox: ${patchError.message}, tentando estratégia alternativa...`);
-              }
-              
-              // ESTRATÉGIA 2: Se PATCH não funcionou, tentar criar webhook via endpoint de webhooks
-              if (!webhookConfigured) {
-                try {
-                  const webhooksUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.chat_account_id}/webhooks`;
-                  
-                  // Primeiro, verifica se já existe um webhook para esta inbox
-                  const listWebhooksResponse = await fetch(`${webhooksUrl}?inbox_id=${inboxData.id}`, {
-                    method: 'GET',
-                    headers: {
-                      'api_access_token': bodyData.chat_api_key,
-                    },
-                  });
-                  
-                  let existingWebhook = null;
-                  if (listWebhooksResponse.ok) {
-                    const webhooks = await listWebhooksResponse.json();
-                    if (Array.isArray(webhooks) && webhooks.length > 0) {
-                      // Procura webhook que já tenha a URL ou que seja da inbox
-                      existingWebhook = webhooks.find(wh => 
-                        (wh.url === webhookUrl || wh.url?.includes(instanceId)) || 
-                        wh.inbox_id === inboxData.id
-                      );
-                    }
-                  }
-                  
-                  if (existingWebhook) {
-                    // Atualiza webhook existente
-                    console.log(`[INFO] Webhook existente encontrado (ID: ${existingWebhook.id}), atualizando...`);
-                    const updateWebhookResponse = await fetch(`${webhooksUrl}/${existingWebhook.id}`, {
-                      method: 'PATCH',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'api_access_token': bodyData.chat_api_key,
-                      },
-                      body: JSON.stringify({
-                        url: webhookUrl,
-                        inbox_id: inboxData.id,
-                        subscriptions: [
-                          'message_created',
-                          'conversation_updated',
-                          'conversation_status_changed',
-                          'contact_created',
-                          'contact_updated'
-                        ]
-                      }),
-                    });
-                    
-                    if (updateWebhookResponse.ok) {
-                      const updatedWebhook = await updateWebhookResponse.json();
-                      if (updatedWebhook.url === webhookUrl) {
-                        webhookConfigured = true;
-                        console.log(`[INFO] ✅ Webhook atualizado via PATCH /webhooks/{id}`);
-                      }
-                    }
-                  } else {
-                    // Cria novo webhook
-                    console.log(`[INFO] Criando novo webhook via POST /webhooks...`);
-                    const createWebhookResponse = await fetch(webhooksUrl, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'api_access_token': bodyData.chat_api_key,
-                      },
-                      body: JSON.stringify({
-                        url: webhookUrl,
-                        inbox_id: inboxData.id,
-                        subscriptions: [
-                          'message_created',
-                          'conversation_updated',
-                          'conversation_status_changed',
-                          'contact_created',
-                          'contact_updated'
-                        ]
-                      }),
-                    });
-                    
-                    if (createWebhookResponse.ok) {
-                      const createdWebhook = await createWebhookResponse.json();
-                      if (createdWebhook.url === webhookUrl) {
-                        webhookConfigured = true;
-                        console.log(`[INFO] ✅ Webhook criado via POST /webhooks (ID: ${createdWebhook.id})`);
-                      }
-                    } else {
-                      const errorText = await createWebhookResponse.text();
-                      let errorDetails;
-                      try {
-                        errorDetails = JSON.parse(errorText);
-                      } catch {
-                        errorDetails = { message: errorText.substring(0, 500) };
-                      }
-                      webhookError = { strategy: 'POST /webhooks', error: errorDetails };
-                      console.warn(`[WARN] Falha ao criar webhook: ${createWebhookResponse.status}`, errorDetails);
-                    }
-                  }
-                } catch (webhookEndpointError) {
-                  console.error(`[ERROR] Erro ao configurar webhook via endpoint:`, webhookEndpointError);
-                  if (!webhookError) {
-                    webhookError = { strategy: 'webhooks endpoint', error: webhookEndpointError.message };
-                  }
-                }
-              }
-              
-              // Retorna resposta com status do webhook
-              return new Response(
-                JSON.stringify({
-                  success: true,
-                  inbox_id: inboxData.id,
-                  inbox: inboxData,
-                  webhook_configured: webhookConfigured,
-                  webhook_url: webhookUrl,
-                  ...(webhookError && { webhook_error: webhookError })
-                }),
-                {
-                  status: 200,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                }
-              );
-            } catch (webhookError) {
-              console.error(`[ERROR] Erro ao configurar webhook:`, webhookError);
-              // Retorna sucesso mesmo se webhook falhar (inbox foi criada)
-              return new Response(
-                JSON.stringify({
-                  success: true,
-                  inbox_id: inboxData.id,
-                  inbox: inboxData,
-                  webhook_configured: false,
-                  webhook_error: { message: webhookError.message }
-                }),
-                {
-                  status: 200,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                }
-              );
-            }
-          }
+          // A configuração completa do webhook será feita via /chatwoot/config após a instância ser conectada
+          // Isso evita tentar configurar webhook quando a instância ainda não está conectada
+          console.log(`[INFO] Inbox criada. Webhook será configurado automaticamente via /chatwoot/config após a conexão da instância.`);
           
-          // Se não tem instance_id, retorna sucesso sem configurar webhook
           return new Response(
             JSON.stringify({
               success: true,
               inbox_id: inboxData.id,
               inbox: inboxData,
-              webhook_configured: false,
-              note: 'Instance ID not provided, webhook not configured'
+              note: 'Inbox created. Webhook will be configured automatically via /chatwoot/config after instance connection.'
             }),
             {
               status: 200,

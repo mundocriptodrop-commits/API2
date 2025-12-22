@@ -756,7 +756,46 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         // Verifica se o webhook foi configurado
         if (configData.webhook_url || configData.channel_webhook_updated || configData.webhook_updated_in_chatwoot) {
           console.log(`[CHATWOOT] ✅ Webhook configurado automaticamente via /chatwoot/config`);
-          showToast(`Integração Chatwoot configurada com sucesso para "${instance.name}"!`, 'success');
+          
+          // Buscar o nome da inbox do Chatwoot
+          // A inbox é criada com o nome da instância, mas vamos buscar da resposta para garantir
+          let inboxName = instance.name; // Fallback para o nome da instância
+          
+          try {
+            // Tentar obter o nome da inbox da resposta do config
+            if (configData.chatwoot_response?.name) {
+              inboxName = configData.chatwoot_response.name;
+            } else if (configData.inbox?.name) {
+              inboxName = configData.inbox.name;
+            } else if (configData.channel_update_response?.name) {
+              inboxName = configData.channel_update_response.name;
+            } else {
+              // Se não estiver na resposta, fazer uma chamada para buscar o nome da inbox
+              const chatwootBaseUrl = profileData.chat_url.endsWith('/') 
+                ? profileData.chat_url.slice(0, -1) 
+                : profileData.chat_url;
+              
+              const inboxResponse = await fetch(
+                `${chatwootBaseUrl}/api/v1/accounts/${profileData.chat_account_id}/inboxes/${inboxId}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    'api_access_token': profileData.chat_api_key,
+                  },
+                }
+              );
+              
+              if (inboxResponse.ok) {
+                const inboxData = await inboxResponse.json();
+                inboxName = inboxData.name || instance.name;
+              }
+            }
+          } catch (error) {
+            console.warn(`[CHATWOOT] Não foi possível buscar o nome da inbox, usando nome da instância:`, error);
+            // Usa o nome da instância como fallback (que é o mesmo usado para criar a inbox)
+          }
+          
+          showToast(`Integração com Chat configurada com sucesso para caixa de entrada "${inboxName}"!`, 'success');
         }
       } else {
         const configErrorText = await configResponse.text();
