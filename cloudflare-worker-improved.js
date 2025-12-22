@@ -20,6 +20,127 @@ const DEFAULT_RATE_LIMIT = 1000;
 // Cache expira em 5 minutos
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
+// Cache para controle de duplicação de webhooks do Chatwoot
+// Usa Cache API do Cloudflare para cache compartilhado entre instâncias
+const CHATWOOT_CACHE_TTL = 5 * 60; // 5 minutos em segundos (para Cache API)
+
+/**
+ * Gera uma chave única para identificar webhooks duplicados do Chatwoot
+ * Usa event_id, message_id ou hash do conteúdo
+ * Prioriza campos que identificam unicamente a mensagem
+ */
+function generateChatwootWebhookKey(webhookBody, instanceId) {
+  try {
+    const body = typeof webhookBody === 'string' ? JSON.parse(webhookBody) : webhookBody;
+    
+    // Prioridade 1: event_id do Chatwoot (mais confiável - único por evento)
+    if (body.event_id) {
+      const key = `chatwoot:${instanceId}:event:${body.event_id}`;
+      console.log(`[CACHE_KEY] Usando event_id: ${body.event_id}`);
+      return key;
+    }
+    
+    // Prioridade 2: message.id + conversation.id (identifica mensagem única)
+    if (body.message && body.message.id && body.conversation && body.conversation.id) {
+      const key = `chatwoot:${instanceId}:conv:${body.conversation.id}:msg:${body.message.id}`;
+      console.log(`[CACHE_KEY] Usando conversation.id + message.id: conv:${body.conversation.id}, msg:${body.message.id}`);
+      return key;
+    }
+    
+    // Prioridade 3: message_id direto
+    if (body.message_id) {
+      const key = `chatwoot:${instanceId}:msg:${body.message_id}`;
+      console.log(`[CACHE_KEY] Usando message_id: ${body.message_id}`);
+      return key;
+    }
+    
+    // Prioridade 4: conversation.id + content + timestamp (para mensagens sem ID)
+    if (body.conversation && body.conversation.id && body.message && body.message.content) {
+      const contentPreview = body.message.content.substring(0, 50);
+      const timestamp = body.timestamp || body.created_at || body.message.created_at;
+      const key = `chatwoot:${instanceId}:conv:${body.conversation.id}:content:${contentPreview}:ts:${timestamp}`;
+      console.log(`[CACHE_KEY] Usando conversation.id + content + timestamp`);
+      return key;
+    }
+    
+    // Fallback: hash do conteúdo completo (menos confiável, mas melhor que nada)
+    const contentHash = JSON.stringify({
+      event: body.event,
+      conversation_id: body.conversation?.id,
+      message_id: body.message?.id,
+      content: body.message?.content?.substring(0, 100),
+      timestamp: body.timestamp || body.created_at || body.message?.created_at,
+    });
+    // Usa um hash simples baseado no conteúdo
+    let hash = 0;
+    for (let i = 0; i < contentHash.length; i++) {
+      const char = contentHash.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    const key = `chatwoot:${instanceId}:hash:${Math.abs(hash)}`;
+    console.log(`[CACHE_KEY] Usando hash do conteúdo: ${Math.abs(hash)}`);
+    return key;
+  } catch (error) {
+    // Se não conseguir parsear, usa hash do body inteiro
+    const bodyStr = typeof webhookBody === 'string' ? webhookBody : JSON.stringify(webhookBody);
+    let hash = 0;
+    for (let i = 0; i < Math.min(bodyStr.length, 500); i++) {
+      const char = bodyStr.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    const key = `chatwoot:${instanceId}:raw:${Math.abs(hash)}`;
+    console.log(`[CACHE_KEY] Erro ao parsear, usando hash do body: ${Math.abs(hash)}`);
+    return key;
+  }
+}
+
+/**
+ * Verifica se webhook já foi processado usando Cache API do Cloudflare
+ * Retorna null se não encontrado, ou o objeto cacheado se encontrado
+ */
+async function getCachedWebhook(cacheKey, cache) {
+  try {
+    const cacheRequest = new Request(`https://chatwoot-cache/${cacheKey}`);
+    const cachedResponse = await cache.match(cacheRequest);
+    
+    if (cachedResponse) {
+      const cachedData = await cachedResponse.json();
+      return cachedData;
+    }
+    return null;
+  } catch (error) {
+    console.warn(`[CACHE] Erro ao buscar webhook no cache: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Armazena webhook no cache usando Cache API do Cloudflare
+ */
+async function setCachedWebhook(cacheKey, responseData, cache) {
+  try {
+    const cacheRequest = new Request(`https://chatwoot-cache/${cacheKey}`);
+    const cacheResponse = new Response(JSON.stringify({
+      timestamp: Date.now(),
+      response: responseData,
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': `public, max-age=${CHATWOOT_CACHE_TTL}`,
+      },
+    });
+    
+    // Armazena no cache com TTL
+    await cache.put(cacheRequest, cacheResponse);
+    return true;
+  } catch (error) {
+    console.warn(`[CACHE] Erro ao armazenar webhook no cache: ${error.message}`);
+    return false;
+  }
+}
+
 // Rate Limiting Configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // Janela de 1 minuto
 const RATE_LIMIT_STRICT = 100; // Limite mais restritivo para casos suspeitos
@@ -476,7 +597,7 @@ async function handleRequest(request, env = {}, ctx) {
   // Esta função suporta QUALQUER token de QUALQUER instância
   // Webhooks do Chatwoot não requerem validação de token aqui
   if (!isChatwootWebhook && token) {
-    console.log(`[INFO] Starting token validation for token: ${token.substring(0, 20)}...`);
+  console.log(`[INFO] Starting token validation for token: ${token.substring(0, 20)}...`);
   }
   const validationStartTime = Date.now();
   
@@ -487,9 +608,9 @@ async function handleRequest(request, env = {}, ctx) {
       validation = { valid: true, skip: true };
       console.log(`[INFO] Skipping token validation for Chatwoot webhook`);
     } else {
-      validation = await validateToken(token, SUPABASE_URL, SUPABASE_ANON_KEY, DEBUG_MODE, TOKEN_CACHE);
-      const validationDuration = Date.now() - validationStartTime;
-      console.log(`[INFO] Token validation completed in ${validationDuration}ms - Valid: ${validation.valid}`);
+    validation = await validateToken(token, SUPABASE_URL, SUPABASE_ANON_KEY, DEBUG_MODE, TOKEN_CACHE);
+    const validationDuration = Date.now() - validationStartTime;
+    console.log(`[INFO] Token validation completed in ${validationDuration}ms - Valid: ${validation.valid}`);
     }
   } catch (error) {
     console.error(`[ERROR] Token validation threw exception: ${error.message}`);
@@ -540,7 +661,7 @@ async function handleRequest(request, env = {}, ctx) {
   }
   
   if (!isChatwootWebhook && validation.instance) {
-    console.log(`[INFO] Token validated successfully - Instance ID: ${validation.instance.id}, Status: ${validation.instance.status}`);
+  console.log(`[INFO] Token validated successfully - Instance ID: ${validation.instance.id}, Status: ${validation.instance.status}`);
   }
 
   // Token válido ou webhook! Processa a requisição
@@ -639,14 +760,245 @@ async function handleRequest(request, env = {}, ctx) {
               console.log(`[INFO] Using instance_token in webhook URL for UAZAPI (instead of instance_id)`);
               console.log(`[INFO] Original path had instance_id: ${instanceId}, now using token in URL`);
               
-              // Lê o body da requisição do Chatwoot
+              // Lê o body da requisição do Chatwoot ANTES de processar
+              // Isso permite verificar duplicação antes de enviar para UAZAPI
               const webhookBody = await request.text();
+              
+              // Verifica duplicação de webhook ANTES de processar usando Cache API
+              const webhookKey = generateChatwootWebhookKey(webhookBody, instanceId);
+              
+              // Log da chave gerada para debug
+              console.log(`[CACHE] Webhook cache key: ${webhookKey.substring(0, 120)}...`);
+              console.log(`[CACHE] Body length: ${webhookBody.length} bytes`);
+              
+              // Obtém cache do contexto (Cache API do Cloudflare - compartilhado entre instâncias)
+              const cache = caches.default;
+              
+              // ESTRATÉGIA ANTI-RACE CONDITION MELHORADA:
+              // 1. Verifica cache primeiro (pode já estar processado)
+              // 2. Tenta adquirir lock com timestamp único
+              // 3. Verifica novamente se conseguiu o lock (double-check)
+              // 4. Se não conseguiu, aguarda e verifica cache
+              
+              // PASSO 1: Verifica cache primeiro
+              const cachedWebhook = await getCachedWebhook(webhookKey, cache);
+              
+              if (cachedWebhook) {
+                const age = Date.now() - cachedWebhook.timestamp;
+                console.log(`[CACHE] Webhook encontrado no cache! Idade: ${age}ms`);
+                
+                if (age < (CHATWOOT_CACHE_TTL * 1000)) {
+                  // Webhook duplicado detectado - retorna resposta em cache
+                  console.log(`[DUPLICATE] ⚠️ Webhook duplicado detectado!`);
+                  console.log(`[DUPLICATE] Cache key: ${webhookKey.substring(0, 80)}...`);
+                  console.log(`[DUPLICATE] Timestamp do cache: ${new Date(cachedWebhook.timestamp).toISOString()}`);
+                  console.log(`[DUPLICATE] Retornando resposta em cache (evitando envio duplicado para UAZAPI)`);
+                  
+                  return new Response(
+                    JSON.stringify({
+                      ...(cachedWebhook.response),
+                      duplicate: true,
+                      cached: true,
+                      message: 'Webhook já processado anteriormente',
+                    }),
+                    {
+                      status: 200,
+                      headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                        'X-Duplicate-Detected': 'true',
+                        'X-Cached-Response': 'true',
+                      },
+                    }
+                  );
+                } else {
+                  console.log(`[CACHE] Webhook no cache expirado (${age}ms), ignorando`);
+                }
+              } else {
+                console.log(`[CACHE] Webhook NÃO encontrado no cache - tentando adquirir lock`);
+              }
+              
+              // PASSO 2: Tenta adquirir lock com timestamp único (BALANCEADO - velocidade + segurança)
+              const processingKey = `processing:${webhookKey}`;
+              const lockRequest = new Request(`https://chatwoot-lock/${processingKey}`);
+              const lockTimestamp = Date.now();
+              const lockOwner = `${lockTimestamp}-${Math.random().toString(36).substring(7)}`; // ID único para este lock
+              
+              const lockResponse = new Response(JSON.stringify({ 
+                processing: true, 
+                timestamp: lockTimestamp,
+                owner: lockOwner,
+                instanceId: instanceId 
+              }), {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Cache-Control': `public, max-age=8`, // Lock expira em 8 segundos (balanceado)
+                },
+              });
+              
+              // Tenta adquirir o lock (versão balanceada - segurança primeiro)
+              let lockAcquired = false;
+              try {
+                // Verifica se já existe lock ANTES de tentar adquirir
+                const existingLock = await cache.match(lockRequest);
+                if (existingLock) {
+                  const lockData = await existingLock.json();
+                  const lockAge = Date.now() - lockData.timestamp;
+                  if (lockAge < 8000) { // Lock ainda válido (8 segundos)
+                    console.log(`[DUPLICATE] ⚠️ Webhook já está sendo processado! Lock age: ${lockAge}ms`);
+                    lockAcquired = false;
+                  } else {
+                    // Lock expirado, podemos tentar adquirir
+                    console.log(`[INFO] Lock expirado (${lockAge}ms), tentando adquirir novo lock`);
+                  }
+                }
+                
+                // Se não há lock válido, tenta adquirir
+                if (!existingLock || (existingLock && (Date.now() - (await existingLock.json()).timestamp) >= 8000)) {
+                  await cache.put(lockRequest, lockResponse);
+                  
+                  // DOUBLE-CHECK: delay suficiente para garantir propagação do cache
+                  await new Promise(resolve => setTimeout(resolve, 40)); // 40ms (balanceado)
+                  const verifyLock = await cache.match(lockRequest);
+                  if (verifyLock) {
+                    const verifyData = await verifyLock.json();
+                    if (verifyData.owner === lockOwner) {
+                      lockAcquired = true;
+                      console.log(`[INFO] Lock adquirido com sucesso (owner: ${lockOwner.substring(0, 15)}...)`);
+                    } else {
+                      console.log(`[WARN] Lock foi adquirido por outra requisição (owner: ${verifyData.owner?.substring(0, 15)}...), aguardando...`);
+                      lockAcquired = false;
+                    }
+                  } else {
+                    // Lock não persistiu - não processa sem confirmação (segurança)
+                    console.log(`[WARN] Lock não persistiu, tentando novamente...`);
+                    lockAcquired = false;
+                  }
+                }
+              } catch (lockError) {
+                console.warn(`[WARN] Erro ao adquirir lock: ${lockError.message}`);
+                // Em caso de erro, NÃO processa (segurança primeiro)
+                lockAcquired = false;
+              }
+              
+              // PASSO 3: Se não conseguiu o lock, aguarda e verifica cache (BALANCEADO)
+              if (!lockAcquired) {
+                console.log(`[DUPLICATE] ⚠️ Não foi possível adquirir lock, aguardando processamento de outra requisição...`);
+                
+                // Aguarda e verifica o cache de resultado (balanceado - mais tentativas que antes)
+                for (let attempt = 0; attempt < 12; attempt++) { // 12 tentativas (balanceado)
+                  const delay = Math.min(80 + (attempt * 40), 300); // Backoff: 80ms → 120ms → 160ms... até 300ms
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                  
+                  // Verifica cache primeiro (mais rápido)
+                  const retryCached = await getCachedWebhook(webhookKey, cache);
+                  if (retryCached && (Date.now() - retryCached.timestamp) < (CHATWOOT_CACHE_TTL * 1000)) {
+                    console.log(`[DUPLICATE] ✅ Webhook foi processado enquanto aguardava (tentativa ${attempt + 1}), retornando cache`);
+                    return new Response(
+                      JSON.stringify({
+                        ...(retryCached.response),
+                        duplicate: true,
+                        cached: true,
+                        message: 'Webhook processado por outra requisição simultânea',
+                      }),
+                      {
+                        status: 200,
+                        headers: {
+                          ...corsHeaders,
+                          'Content-Type': 'application/json',
+                          'X-Duplicate-Detected': 'true',
+                          'X-Cached-Response': 'true',
+                        },
+                      }
+                    );
+                  }
+                  
+                  // Verifica se o lock ainda existe (a cada tentativa para garantir)
+                  const stillLocked = await cache.match(lockRequest);
+                  if (!stillLocked) {
+                    // Lock foi liberado, verifica cache uma última vez
+                    const finalCheck = await getCachedWebhook(webhookKey, cache);
+                    if (finalCheck && (Date.now() - finalCheck.timestamp) < (CHATWOOT_CACHE_TTL * 1000)) {
+                      console.log(`[DUPLICATE] ✅ Webhook encontrado no cache após lock ser liberado`);
+                      return new Response(
+                        JSON.stringify({
+                          ...(finalCheck.response),
+                          duplicate: true,
+                          cached: true,
+                          message: 'Webhook processado por outra requisição',
+                        }),
+                        {
+                          status: 200,
+                          headers: {
+                            ...corsHeaders,
+                            'Content-Type': 'application/json',
+                            'X-Duplicate-Detected': 'true',
+                            'X-Cached-Response': 'true',
+                          },
+                        }
+                      );
+                    }
+                    // Lock liberado mas sem cache - pode ter falhado, vamos processar
+                    console.log(`[INFO] Lock foi liberado mas resultado não encontrado, tentando processar...`);
+                    break;
+                  }
+                }
+                
+                // Se chegou aqui, aguardou mas não encontrou resultado
+                // Tenta adquirir lock novamente (pode ter sido liberado)
+                if (!lockAcquired) {
+                  try {
+                    await cache.put(lockRequest, lockResponse);
+                    await new Promise(resolve => setTimeout(resolve, 40)); // Double-check
+                    const verifyLock = await cache.match(lockRequest);
+                    if (verifyLock) {
+                      const verifyData = await verifyLock.json();
+                      if (verifyData.owner === lockOwner) {
+                        lockAcquired = true;
+                        console.log(`[INFO] Lock adquirido após aguardar (owner: ${lockOwner.substring(0, 15)}...)`);
+                      } else {
+                        console.log(`[WARN] Lock ainda pertence a outra requisição, não processando`);
+                        lockAcquired = false;
+                      }
+                    } else {
+                      console.log(`[WARN] Lock não persistiu após aguardar, não processando`);
+                      lockAcquired = false;
+                    }
+                  } catch (e) {
+                    console.warn(`[WARN] Erro ao tentar adquirir lock novamente: ${e.message}`);
+                    lockAcquired = false;
+                  }
+                }
+              }
+              
+              // PASSO 4: Só processa se tiver lock confirmado (SEGURANÇA PRIMEIRO)
+              if (!lockAcquired) {
+                console.log(`[ERROR] Não foi possível adquirir lock após todas as tentativas. Retornando erro para evitar duplicação.`);
+                return new Response(
+                  JSON.stringify({
+                    error: 'Webhook processing conflict',
+                    message: 'Another request is processing this webhook. Please retry.',
+                    retry_after: 1,
+                  }),
+                  {
+                    status: 409, // Conflict
+                    headers: {
+                      ...corsHeaders,
+                      'Content-Type': 'application/json',
+                      'Retry-After': '1',
+                    },
+                  }
+                );
+              }
+              
+              console.log(`[INFO] Processando webhook com lock confirmado...`);
               
               // Faz proxy para a API externa com o token da instância
               console.log(`[INFO] Proxying webhook to UAZAPI: ${targetUrl}`);
               console.log(`[INFO] Webhook body length: ${webhookBody.length} bytes`);
               if (DEBUG_MODE) {
                 console.log(`[DEBUG] Webhook body preview: ${webhookBody.substring(0, 300)}...`);
+                console.log(`[DEBUG] Webhook cache key: ${webhookKey.substring(0, 100)}...`);
               }
               
               const webhookResponse = await fetch(targetUrl, {
@@ -671,6 +1023,28 @@ async function handleRequest(request, env = {}, ctx) {
                 console.error(`[ERROR] Target URL: ${targetUrl}`);
                 console.error(`[ERROR] Request method: ${request.method}`);
                 console.error(`[ERROR] This may indicate that the UAZAPI does not accept Chatwoot webhooks directly, or the token is invalid.`);
+              }
+              
+              // Armazena resposta no cache para prevenir duplicação (apenas se sucesso)
+              // OTIMIZAÇÃO: Armazena cache ANTES de liberar lock para garantir que outras requisições encontrem
+              if (webhookResponse.status >= 200 && webhookResponse.status < 300) {
+                try {
+                  const responseData = JSON.parse(webhookResponseData);
+                  // Armazena cache primeiro (mais importante que liberar lock)
+                  await setCachedWebhook(webhookKey, responseData, cache);
+                  console.log(`[INFO] ✅ Webhook armazenado no cache`);
+                } catch (parseError) {
+                  console.warn(`[WARN] Erro ao armazenar cache: ${parseError.message}`);
+                }
+              }
+              
+              // Remove o lock após processar (libera imediatamente para outras requisições)
+              // OTIMIZAÇÃO: Libera lock em paralelo (não bloqueia resposta)
+              if (lockAcquired) {
+                cache.delete(lockRequest).catch(() => {
+                  // Ignora erro (lock vai expirar sozinho em 5s)
+                });
+                console.log(`[INFO] Lock liberado`);
               }
               
               return new Response(webhookResponseData, {
@@ -1099,8 +1473,8 @@ async function handleRequest(request, env = {}, ctx) {
       // Headers específicos para Edge Functions
       fetchHeaders['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
       if (validation.instance) {
-        fetchHeaders['X-Instance-ID'] = validation.instance.id;
-        fetchHeaders['X-User-ID'] = validation.instance.user_id;
+      fetchHeaders['X-Instance-ID'] = validation.instance.id;
+      fetchHeaders['X-User-ID'] = validation.instance.user_id;
       }
       
       // Adiciona Content-Type apenas para métodos que podem ter body
