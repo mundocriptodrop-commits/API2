@@ -2252,9 +2252,26 @@ export default function ClientApiTab() {
 
   const currentEndpointRaw = endpointData[selectedEndpoint as EndpointType];
   const hasTestResponse = Boolean(testResponse);
-  const isTestError =
-    hasTestResponse &&
-    (testResponse.includes('"error"') || testResponse.includes('"Error"'));
+  
+  // Lógica especial para endpoint chatwoot-config: considera sucesso se channel_webhook_updated for true
+  let isTestError = false;
+  if (hasTestResponse) {
+    try {
+      const parsed = JSON.parse(testResponse);
+      // Para chatwoot-config, verifica se channel_webhook_updated ou webhook_updated_in_chatwoot é true
+      if (selectedEndpoint === 'chatwoot-config' && parsed.webhook_url) {
+        const webhookUpdated = parsed.webhook_updated_in_chatwoot === true || parsed.channel_webhook_updated === true;
+        isTestError = !webhookUpdated && (parsed.webhook_update_error || parsed.channel_update_error);
+      } else {
+        // Para outros endpoints, verifica se tem "error" na resposta
+        isTestError = testResponse.includes('"error"') || testResponse.includes('"Error"');
+      }
+    } catch {
+      // Se não for JSON válido, usa lógica padrão
+      isTestError = testResponse.includes('"error"') || testResponse.includes('"Error"');
+    }
+  }
+  
   const testResponseCardClass = !hasTestResponse
     ? 'bg-slate-900 border border-slate-700'
     : isTestError
