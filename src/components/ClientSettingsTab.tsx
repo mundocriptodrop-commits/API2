@@ -11,13 +11,11 @@ export default function ClientSettingsTab() {
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [chatUrl, setChatUrl] = useState('');
   const [loadingChatUrl, setLoadingChatUrl] = useState(true);
-  const [savingChatUrl, setSavingChatUrl] = useState(false);
   const [chatApiKey, setChatApiKey] = useState('');
   const [loadingChatApiKey, setLoadingChatApiKey] = useState(true);
-  const [savingChatApiKey, setSavingChatApiKey] = useState(false);
   const [chatAccountId, setChatAccountId] = useState('');
   const [loadingChatAccountId, setLoadingChatAccountId] = useState(true);
-  const [savingChatAccountId, setSavingChatAccountId] = useState(false);
+  const [savingIntegrations, setSavingIntegrations] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -93,69 +91,38 @@ export default function ClientSettingsTab() {
     }
   }
 
-  async function handleSaveChatUrl() {
+  async function handleSaveIntegrations() {
     if (!user?.id) return;
 
-    setSavingChatUrl(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ chat_url: chatUrl.trim() || null })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      showToast('URL do Chat salva com sucesso!', 'success');
-    } catch (error: any) {
-      console.error('Error saving chat URL:', error);
-      showToast(error.message || 'Erro ao salvar URL do Chat', 'error');
-    } finally {
-      setSavingChatUrl(false);
-    }
-  }
-
-  async function handleSaveChatApiKey() {
-    if (!user?.id) return;
-
-    setSavingChatApiKey(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ chat_api_key: chatApiKey.trim() || null })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      showToast('API Key do Chat salva com sucesso!', 'success');
-    } catch (error: any) {
-      console.error('Error saving chat API key:', error);
-      showToast(error.message || 'Erro ao salvar API Key do Chat', 'error');
-    } finally {
-      setSavingChatApiKey(false);
-    }
-  }
-
-  async function handleSaveChatAccountId() {
-    if (!user?.id) return;
-
-    setSavingChatAccountId(true);
-    try {
-      const accountId = chatAccountId.trim() ? parseInt(chatAccountId.trim(), 10) : null;
-      if (chatAccountId.trim() && isNaN(accountId!)) {
+    // Validar Account ID se preenchido
+    if (chatAccountId.trim()) {
+      const accountId = parseInt(chatAccountId.trim(), 10);
+      if (isNaN(accountId)) {
         showToast('Account ID deve ser um número válido', 'error');
         return;
       }
+    }
 
+    setSavingIntegrations(true);
+    try {
+      const accountId = chatAccountId.trim() ? parseInt(chatAccountId.trim(), 10) : null;
+      
       const { error } = await supabase
         .from('profiles')
-        .update({ chat_account_id: accountId })
+        .update({
+          chat_url: chatUrl.trim() || null,
+          chat_api_key: chatApiKey.trim() || null,
+          chat_account_id: accountId,
+        })
         .eq('id', user.id);
 
       if (error) throw error;
-      showToast('Account ID do Chat salvo com sucesso!', 'success');
+      showToast('Configurações de integração salvas com sucesso!', 'success');
     } catch (error: any) {
-      console.error('Error saving chat account ID:', error);
-      showToast(error.message || 'Erro ao salvar Account ID do Chat', 'error');
+      console.error('Error saving integrations:', error);
+      showToast(error.message || 'Erro ao salvar configurações de integração', 'error');
     } finally {
-      setSavingChatAccountId(false);
+      setSavingIntegrations(false);
     }
   }
 
@@ -288,7 +255,7 @@ export default function ClientSettingsTab() {
               value={chatUrl}
               onChange={(e) => setChatUrl(e.target.value)}
               placeholder="https://chat.exemplo.com.br"
-              disabled={loadingChatUrl || savingChatUrl}
+              disabled={loadingChatUrl || loadingChatApiKey || loadingChatAccountId || savingIntegrations}
               className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
             />
             <p className="text-xs text-gray-500 mt-2">
@@ -305,7 +272,7 @@ export default function ClientSettingsTab() {
               value={chatApiKey}
               onChange={(e) => setChatApiKey(e.target.value)}
               placeholder="pxTv3AJcUwZUSxCS6c8q4JMN"
-              disabled={loadingChatApiKey || savingChatApiKey}
+              disabled={loadingChatUrl || loadingChatApiKey || loadingChatAccountId || savingIntegrations}
               className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed font-mono text-sm"
             />
             <p className="text-xs text-gray-500 mt-2">
@@ -322,7 +289,7 @@ export default function ClientSettingsTab() {
               value={chatAccountId}
               onChange={(e) => setChatAccountId(e.target.value)}
               placeholder="1"
-              disabled={loadingChatAccountId || savingChatAccountId}
+              disabled={loadingChatUrl || loadingChatApiKey || loadingChatAccountId || savingIntegrations}
               className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
             />
             <p className="text-xs text-gray-500 mt-2">
@@ -330,13 +297,13 @@ export default function ClientSettingsTab() {
             </p>
           </div>
 
-          <div className="pt-4 border-t border-gray-200 space-y-3">
+          <div className="pt-4 border-t border-gray-200">
             <button
-              onClick={handleSaveChatUrl}
-              disabled={loadingChatUrl || savingChatUrl}
+              onClick={handleSaveIntegrations}
+              disabled={loadingChatUrl || loadingChatApiKey || loadingChatAccountId || savingIntegrations}
               className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
-              {savingChatUrl ? (
+              {savingIntegrations ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Salvando...</span>
@@ -344,43 +311,7 @@ export default function ClientSettingsTab() {
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  <span>Salvar URL do Chat</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleSaveChatApiKey}
-              disabled={loadingChatApiKey || savingChatApiKey}
-              className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-            >
-              {savingChatApiKey ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Salvando...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Salvar API Key do Chat</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleSaveChatAccountId}
-              disabled={loadingChatAccountId || savingChatAccountId}
-              className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-            >
-              {savingChatAccountId ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Salvando...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Salvar Account ID do Chat</span>
+                  <span>Salvar Configurações de Integração</span>
                 </>
               )}
             </button>
