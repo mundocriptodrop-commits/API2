@@ -342,6 +342,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               if (instance.status === 'disconnected') {
                 loadInstances();
                 showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
+                
+                // Configurar Chatwoot se necessário (após recarregar para ter dados atualizados)
+                const { data: updatedInstance } = await supabase
+                  .from('whatsapp_instances')
+                  .select('*')
+                  .eq('id', instance.id)
+                  .single();
+                
+                if (updatedInstance) {
+                  await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
+                }
               }
               continue;
             }
@@ -378,6 +389,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
                 loadInstances();
                 showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
+                
+                // Configurar Chatwoot se necessário
+                const { data: updatedInstance } = await supabase
+                  .from('whatsapp_instances')
+                  .select('*')
+                  .eq('id', instance.id)
+                  .single();
+                
+                if (updatedInstance) {
+                  await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
+                }
               }
               continue;
             }
@@ -551,6 +573,22 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   status: 'connected',
                   phone_number: phoneNumber || inst.phone_number || null,
                 });
+                
+                // Configurar Chatwoot se necessário (será chamado após os updates serem aplicados)
+                if (inst.chat_enabled && inst.admin_field_01) {
+                  // Usar setTimeout para garantir que o update foi processado
+                  setTimeout(async () => {
+                    const { data: updatedInstance } = await supabase
+                      .from('whatsapp_instances')
+                      .select('*')
+                      .eq('id', inst.id)
+                      .single();
+                    
+                    if (updatedInstance) {
+                      await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
+                    }
+                  }, 1500);
+                }
               }
             } else if (connectionStatus === false) {
               // PROTEÇÃO EXTRA: Antes de marcar como desconectado, verificar novamente
@@ -652,6 +690,90 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     }
   }
 
+  // Função auxiliar para configurar Chatwoot quando a instância for conectada
+  async function configureChatwootIfNeeded(instance: WhatsAppInstance) {
+    // Verifica se a instância tem chat habilitado e inbox_id
+    if (!instance.chat_enabled || !instance.admin_field_01) {
+      return; // Não precisa configurar
+    }
+
+    // Verifica se já foi configurado (podemos usar admin_field_02 como flag)
+    if (instance.admin_field_02 === 'chatwoot_configured') {
+      console.log(`[CHATWOOT] Integração já configurada para instância ${instance.name}`);
+      return;
+    }
+
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('chat_url, chat_api_key, chat_account_id')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (!profileData?.chat_url || !profileData?.chat_api_key || !profileData?.chat_account_id) {
+        console.log(`[CHATWOOT] Configurações do Chat não encontradas para usuário`);
+        return;
+      }
+
+      const inboxId = parseInt(instance.admin_field_01, 10);
+      if (isNaN(inboxId)) {
+        console.error(`[CHATWOOT] Inbox ID inválido: ${instance.admin_field_01}`);
+        return;
+      }
+
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.evasend.com.br/whatsapp';
+      
+      console.log(`[CHATWOOT] Configurando integração completa via /chatwoot/config para instância ${instance.name}...`);
+      
+      const configResponse = await fetch(`${API_BASE_URL}/chatwoot/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': instance.instance_token || '',
+        },
+        body: JSON.stringify({
+          enabled: true,
+          url: profileData.chat_url,
+          access_token: profileData.chat_api_key,
+          account_id: profileData.chat_account_id,
+          inbox_id: inboxId,
+          ignore_groups: false,
+          sign_messages: true,
+          create_new_conversation: false,
+        }),
+      });
+
+      if (configResponse.ok) {
+        const configData = await configResponse.json();
+        console.log(`[CHATWOOT] ✅ Integração configurada com sucesso para instância ${instance.name}:`, configData);
+        
+        // Marcar como configurado
+        await supabase
+          .from('whatsapp_instances')
+          .update({ admin_field_02: 'chatwoot_configured' })
+          .eq('id', instance.id);
+        
+        // Verifica se o webhook foi configurado
+        if (configData.webhook_url || configData.channel_webhook_updated || configData.webhook_updated_in_chatwoot) {
+          console.log(`[CHATWOOT] ✅ Webhook configurado automaticamente via /chatwoot/config`);
+          showToast(`Integração Chatwoot configurada com sucesso para "${instance.name}"!`, 'success');
+        }
+      } else {
+        const configErrorText = await configResponse.text();
+        let configErrorData;
+        try {
+          configErrorData = JSON.parse(configErrorText);
+        } catch {
+          configErrorData = { error: configErrorText, status: configResponse.status };
+        }
+        console.error(`[CHATWOOT] Erro ao configurar integração para instância ${instance.name}:`, configErrorData);
+        // Não mostrar toast de erro aqui para não incomodar o usuário
+      }
+    } catch (error: any) {
+      console.error(`[CHATWOOT] Erro ao chamar /chatwoot/config para instância ${instance.name}:`, error);
+    }
+  }
+
   async function handleCreateInstance() {
     if (!instanceName.trim()) {
       showToast('Por favor, insira um nome para a instância', 'warning');
@@ -729,56 +851,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
               
               // Atualizar a instância com o inbox_id
+              // A configuração completa via /chatwoot/config será feita após a conexão
               await supabase
                 .from('whatsapp_instances')
                 .update({ admin_field_01: inboxId.toString() })
                 .eq('id', newInstanceData.id);
               
-              // Agora configurar a integração completa via /chatwoot/config
-              // Isso é necessário para que o webhook funcione corretamente
-              try {
-                console.log('[CHATWOOT] Configurando integração completa via /chatwoot/config...');
-                const configResponse = await fetch(`${API_BASE_URL}/chatwoot/config`, {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'token': response.token, // Token da instância para autenticação
-                  },
-                  body: JSON.stringify({
-                    enabled: true,
-                    url: profile.chat_url,
-                    access_token: profile.chat_api_key,
-                    account_id: profile.chat_account_id,
-                    inbox_id: inboxId,
-                    ignore_groups: false,
-                    sign_messages: true,
-                    create_new_conversation: false,
-                  }),
-                });
-                
-                if (configResponse.ok) {
-                  const configData = await configResponse.json();
-                  console.log('[CHATWOOT] Integração configurada com sucesso:', configData);
-                  
-                  // Verifica se o webhook foi configurado
-                  if (configData.webhook_url || configData.channel_webhook_updated || configData.webhook_updated_in_chatwoot) {
-                    console.log('[CHATWOOT] ✅ Webhook configurado automaticamente via /chatwoot/config');
-                  }
-                } else {
-                  const configErrorText = await configResponse.text();
-                  let configErrorData;
-                  try {
-                    configErrorData = JSON.parse(configErrorText);
-                  } catch {
-                    configErrorData = { error: configErrorText, status: configResponse.status };
-                  }
-                  console.error('[CHATWOOT] Erro ao configurar integração:', configErrorData);
-                  showToast('Inbox criada, mas houve erro ao configurar a integração. Verifique os logs.', 'warning');
-                }
-              } catch (configError: any) {
-                console.error('[CHATWOOT] Erro ao chamar /chatwoot/config:', configError);
-                showToast('Inbox criada, mas houve erro ao configurar a integração. Verifique os logs.', 'warning');
-              }
+              console.log('[CHATWOOT] Inbox criada. A integração será configurada automaticamente após a conexão da instância.');
             } else {
               let errorData;
               try {
@@ -1069,6 +1148,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           setIsConnecting(false);
           loadInstances();
           showToast('Instância conectada com sucesso!', 'success');
+          
+          // Configurar Chatwoot se necessário (após atualizar status)
+          const { data: updatedInstance } = await supabase
+            .from('whatsapp_instances')
+            .select('*')
+            .eq('id', instance.id)
+            .single();
+          
+          if (updatedInstance) {
+            await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
+          }
         } else if (qrCodeFromApi && qrCodeFromApi.trim() !== '') {
           setQrCode(qrCodeFromApi);
           setIsConnecting(false);
