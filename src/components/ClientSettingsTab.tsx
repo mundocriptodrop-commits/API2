@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Mail, Key, Shield, Bell } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { User, Mail, Key, Shield, Bell, MessageSquare, Save } from 'lucide-react';
 import ToastContainer, { type ToastMessage } from './ToastContainer';
 
 export default function ClientSettingsTab() {
@@ -8,6 +9,9 @@ export default function ClientSettingsTab() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [notifications, setNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
+  const [chatUrl, setChatUrl] = useState('');
+  const [loadingChatUrl, setLoadingChatUrl] = useState(true);
+  const [savingChatUrl, setSavingChatUrl] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -17,6 +21,51 @@ export default function ClientSettingsTab() {
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   };
+
+  useEffect(() => {
+    if (user?.id) {
+      loadChatUrl();
+    }
+  }, [user?.id]);
+
+  async function loadChatUrl() {
+    try {
+      setLoadingChatUrl(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('chat_url')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      setChatUrl(data?.chat_url || '');
+    } catch (error) {
+      console.error('Error loading chat URL:', error);
+      showToast('Erro ao carregar URL do Chat', 'error');
+    } finally {
+      setLoadingChatUrl(false);
+    }
+  }
+
+  async function handleSaveChatUrl() {
+    if (!user?.id) return;
+
+    setSavingChatUrl(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ chat_url: chatUrl.trim() || null })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      showToast('URL do Chat salva com sucesso!', 'success');
+    } catch (error: any) {
+      console.error('Error saving chat URL:', error);
+      showToast(error.message || 'Erro ao salvar URL do Chat', 'error');
+    } finally {
+      setSavingChatUrl(false);
+    }
+  }
 
   const handleSaveNotifications = () => {
     showToast('Configurações de notificações salvas com sucesso!', 'success');
@@ -125,6 +174,53 @@ export default function ClientSettingsTab() {
               className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
             >
               Salvar Preferências
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+            <MessageSquare className="w-5 h-5" />
+            <span>Integrações</span>
+          </h3>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              URL do Chat
+            </label>
+            <input
+              type="url"
+              value={chatUrl}
+              onChange={(e) => setChatUrl(e.target.value)}
+              placeholder="https://chat.exemplo.com.br"
+              disabled={loadingChatUrl || savingChatUrl}
+              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              URL base do sistema de Chat para integrações futuras
+            </p>
+          </div>
+
+          <div className="pt-4 border-t border-gray-200">
+            <button
+              onClick={handleSaveChatUrl}
+              disabled={loadingChatUrl || savingChatUrl}
+              className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              {savingChatUrl ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Salvar URL do Chat</span>
+                </>
+              )}
             </button>
           </div>
         </div>
