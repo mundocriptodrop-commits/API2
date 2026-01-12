@@ -94,10 +94,11 @@ serve(async (req) => {
       );
     }
 
-    // Gera URL do link
+    // Gera URL do link (usa a Edge Function connect para URL mais curta)
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || 'ctshqbxxlauulzsbapjb';
-    const linkUrl = `https://${projectRef}.supabase.co/connect/${linkToken}`;
+    // URL aponta para a Edge Function 'connect' que retorna HTML
+    const linkUrl = `https://${projectRef}.supabase.co/functions/v1/connect/${linkToken}`;
 
     return new Response(
       JSON.stringify({

@@ -1,3 +1,7 @@
+// Esta função é um alias para get-connection-link
+// Permite URLs mais curtas: /functions/v1/connect/[token]
+// Redireciona para a lógica de get-connection-link
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -16,23 +20,57 @@ serve(async (req) => {
     // Extrai token da URL
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(p => p);
-    
-    // Pode vir como /functions/v1/get-connection-link/[token] ou /connect/[token]
     let linkToken = pathParts[pathParts.length - 1];
-    
-    // Se o path contém 'connect', pega o token após 'connect'
-    if (url.pathname.includes('/connect/')) {
-      const connectIndex = pathParts.indexOf('connect');
-      if (connectIndex >= 0 && connectIndex < pathParts.length - 1) {
-        linkToken = pathParts[connectIndex + 1];
-      }
-    }
 
-    if (!linkToken || linkToken === 'get-connection-link') {
-      return new Response(
-        JSON.stringify({ error: 'Invalid link token' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!linkToken || linkToken === 'connect') {
+      const errorHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link Inválido</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .error {
+      background: #ffebee;
+      color: #c62828;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>❌ Link Inválido</h1>
+    <div class="error">
+      <p>Token do link não encontrado na URL.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+      return new Response(errorHtml, {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+      });
     }
 
     // Cria cliente Supabase (sem autenticação - acesso público)
@@ -520,7 +558,7 @@ serve(async (req) => {
     // Auto-refresh a cada 3 segundos para verificar se conectou
     const checkInterval = setInterval(async () => {
       try {
-        const response = await fetch(\`\${supabaseUrl}/functions/v1/get-connection-link/\${linkToken}\`, {
+        const response = await fetch(\`\${supabaseUrl}/functions/v1/connect/\${linkToken}\`, {
           headers: {
             'apikey': supabaseAnonKey,
             'Accept': 'application/json',
