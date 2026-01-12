@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 
-const API_BASE_URL = 'https://sender.uazapi.com';
+const API_BASE_URL = 'https://api.evasend.com.br/whatsapp';
+const UAZAPI_BASE_URL = 'https://sender.uazapi.com';
 
 async function getAdminToken(): Promise<string> {
   const { data, error } = await supabase
@@ -77,7 +78,7 @@ export const whatsappApi = {
     console.log('Fazendo requisição para API:', `${API_BASE_URL}/instance/init`);
     console.log('Payload:', { name, systemName });
 
-    const response = await fetch(`${API_BASE_URL}/instance/init`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance/init`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -131,7 +132,7 @@ export const whatsappApi = {
     console.log('Conectando instância com token:', token);
     console.log('Telefone:', phone || 'Usando QR Code');
 
-    const response = await fetch(`${API_BASE_URL}/instance/connect`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance/connect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -169,7 +170,7 @@ export const whatsappApi = {
   },
 
   async disconnectInstance(token: string): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_BASE_URL}/instance/disconnect`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance/disconnect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -186,7 +187,7 @@ export const whatsappApi = {
   },
 
   async getInstanceStatus(token: string): Promise<InstanceStatusResponse> {
-    const response = await fetch(`${API_BASE_URL}/instance/status`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance/status`, {
       method: 'GET',
       headers: {
         'token': token,
@@ -202,7 +203,7 @@ export const whatsappApi = {
 
   async logoutInstance(token: string): Promise<{ success: boolean }> {
     console.log('Fazendo logout da instância:', token);
-    const response = await fetch(`${API_BASE_URL}/instance/logout`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance/logout`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -221,7 +222,7 @@ export const whatsappApi = {
   },
 
   async updateInstanceName(token: string, name: string): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_BASE_URL}/instance/updateInstanceName`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance/updateInstanceName`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -238,7 +239,7 @@ export const whatsappApi = {
   },
 
   async deleteInstance(token: string): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_BASE_URL}/instance`, {
+    const response = await fetch(`${UAZAPI_BASE_URL}/instance`, {
       method: 'DELETE',
       headers: {
         'token': token,
@@ -247,6 +248,41 @@ export const whatsappApi = {
 
     if (!response.ok) {
       throw new Error('Failed to delete instance');
+    }
+
+    return response.json();
+  },
+
+  async generateProvisionalLink(instanceId: string, expiresHours?: number): Promise<{
+    success: boolean;
+    link: string;
+    token: string;
+    expires_at: string;
+  }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('Not authenticated');
+    }
+
+    // Usa Supabase Edge Function ao invés de Cloudflare Worker
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ctshqbxxlauulzsbapjb.supabase.co';
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
+    const response = await fetch(`${supabaseUrl}/functions/v1/generate-provisional-link`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': supabaseAnonKey,
+      },
+      body: JSON.stringify({
+        instance_id: instanceId,
+        expires_hours: expiresHours || 24,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || error.message || 'Failed to generate provisional link');
     }
 
     return response.json();

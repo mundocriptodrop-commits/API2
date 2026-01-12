@@ -22,7 +22,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 // Cache para controle de duplicação de webhooks do Chatwoot
 // Usa Cache API do Cloudflare para cache compartilhado entre instâncias
-const CHATWOOT_CACHE_TTL = 5 * 60; // 5 minutos em segundos (para Cache API)
+const CHATWOOT_CACHE_TTL = 10 * 60; // 10 minutos em segundos (aumentado para prevenir duplicação)
 
 /**
  * Gera uma chave única para identificar webhooks duplicados do Chatwoot
@@ -571,7 +571,7 @@ async function handleRequest(request, env = {}, ctx) {
   const token = request.headers.get('token');
 
   if (!token && !isChatwootWebhook && !isChatwootCreateInbox) {
-    console.log(`[WARN] Token missing and not a Chatwoot webhook/create-inbox - path: ${pathForWebhookCheck}`);
+    console.log(`[WARN] Token missing and not a Chatwoot webhook/create-inbox - path: ${normalizedPath}`);
     return new Response(
       JSON.stringify({ error: 'Token is required in header' }),
       {
@@ -774,36 +774,45 @@ async function handleRequest(request, env = {}, ctx) {
               // Isso permite verificar duplicação antes de enviar para UAZAPI
               const webhookBody = await request.text();
               
+              // Parse do body para extrair informações
+              let webhookData;
+              try {
+                webhookData = JSON.parse(webhookBody);
+              } catch (e) {
+                console.error(`[ERROR] Erro ao parsear webhook body: ${e.message}`);
+                return new Response(
+                  JSON.stringify({ error: 'Invalid webhook body' }),
+                  { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+              }
+              
               // Verifica duplicação de webhook ANTES de processar usando Cache API
               const webhookKey = generateChatwootWebhookKey(webhookBody, instanceId);
               
-              // Log da chave gerada para debug
-              console.log(`[CACHE] Webhook cache key: ${webhookKey.substring(0, 120)}...`);
-              console.log(`[CACHE] Body length: ${webhookBody.length} bytes`);
+              // VERIFICAÇÃO CRÍTICA: Verifica no banco de dados ANTES de processar
+              // Usa webhook_key (hash) como identificador principal, já que message.id pode não existir
+              let messageAlreadyProcessed = false;
+              let duplicateCheckKey = null;
               
-              // Obtém cache do contexto (Cache API do Cloudflare - compartilhado entre instâncias)
+              // Tenta múltiplas formas de identificar a mensagem
+              if (webhookData.message && webhookData.message.id) {
+                duplicateCheckKey = webhookData.message.id.toString();
+              } else if (webhookData.message_id) {
+                duplicateCheckKey = webhookData.message_id.toString();
+              } else {
+                // SEMPRE usa webhook_key como fallback (já foi gerado acima)
+                duplicateCheckKey = webhookKey; // Usa a chave do cache que já foi gerada
+                console.log(`[DB_CHECK] Usando webhook_key como identificador: ${webhookKey.substring(0, 80)}...`);
+              }
+              
+              // OTIMIZAÇÃO: Verifica cache PRIMEIRO (mais rápido que banco)
               const cache = caches.default;
-              
-              // ESTRATÉGIA ANTI-RACE CONDITION MELHORADA:
-              // 1. Verifica cache primeiro (pode já estar processado)
-              // 2. Tenta adquirir lock com timestamp único
-              // 3. Verifica novamente se conseguiu o lock (double-check)
-              // 4. Se não conseguiu, aguarda e verifica cache
-              
-              // PASSO 1: Verifica cache primeiro
               const cachedWebhook = await getCachedWebhook(webhookKey, cache);
               
               if (cachedWebhook) {
                 const age = Date.now() - cachedWebhook.timestamp;
-                console.log(`[CACHE] Webhook encontrado no cache! Idade: ${age}ms`);
-                
                 if (age < (CHATWOOT_CACHE_TTL * 1000)) {
-                  // Webhook duplicado detectado - retorna resposta em cache
-                  console.log(`[DUPLICATE] ⚠️ Webhook duplicado detectado!`);
-                  console.log(`[DUPLICATE] Cache key: ${webhookKey.substring(0, 80)}...`);
-                  console.log(`[DUPLICATE] Timestamp do cache: ${new Date(cachedWebhook.timestamp).toISOString()}`);
-                  console.log(`[DUPLICATE] Retornando resposta em cache (evitando envio duplicado para UAZAPI)`);
-                  
+                  console.log(`[CACHE] ✅ Webhook encontrado no cache (${age}ms) - retornando imediatamente`);
                   return new Response(
                     JSON.stringify({
                       ...(cachedWebhook.response),
@@ -821,14 +830,165 @@ async function handleRequest(request, env = {}, ctx) {
                       },
                     }
                   );
-                } else {
-                  console.log(`[CACHE] Webhook no cache expirado (${age}ms), ignorando`);
                 }
-              } else {
-                console.log(`[CACHE] Webhook NÃO encontrado no cache - tentando adquirir lock`);
               }
               
-              // PASSO 2: Tenta adquirir lock com timestamp único (BALANCEADO - velocidade + segurança)
+              // OTIMIZAÇÃO: Verificações no banco em PARALELO (mais rápido)
+              try {
+                const checkPromises = [];
+                
+                // Verificação principal por webhook_key (sempre existe)
+                const mainCheckUrl = `${SUPABASE_URL}/rest/v1/chatwoot_processed_messages?webhook_key=eq.${encodeURIComponent(webhookKey)}&select=id,processed_at,message_id,instance_id,conversation_id&limit=1`;
+                checkPromises.push(
+                  fetch(mainCheckUrl, {
+                    headers: {
+                      'apikey': SUPABASE_ANON_KEY,
+                      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    },
+                  }).then(r => r.ok ? r.json() : [])
+                );
+                
+                // Se tiver conversation_id, também verifica em paralelo
+                if (webhookData.conversation && webhookData.conversation.id) {
+                  const conversationId = webhookData.conversation.id.toString();
+                  const conversationCheckUrl = `${SUPABASE_URL}/rest/v1/chatwoot_processed_messages?conversation_id=eq.${encodeURIComponent(conversationId)}&webhook_key=eq.${encodeURIComponent(webhookKey)}&select=id,processed_at,message_id,instance_id&limit=1`;
+                  checkPromises.push(
+                    fetch(conversationCheckUrl, {
+                      headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                      },
+                    }).then(r => r.ok ? r.json() : [])
+                  );
+                }
+                
+                // Executa todas as verificações em paralelo
+                console.log(`[DB_CHECK] Verificando no banco (paralelo): ${checkPromises.length} consulta(s)...`);
+                const results = await Promise.all(checkPromises);
+                
+                // Verifica se encontrou duplicado em qualquer resultado
+                for (const existing of results) {
+                  if (existing && existing.length > 0) {
+                    const record = existing[0];
+                    // Verifica se é duplicado (mesmo webhook_key = mesma mensagem)
+                    if (record.webhook_key === webhookKey) {
+                      messageAlreadyProcessed = true;
+                      console.log(`[DUPLICATE] ⚠️⚠️⚠️ MENSAGEM JÁ PROCESSADA NO BANCO! ⚠️⚠️⚠️`);
+                      console.log(`[DUPLICATE] Webhook Key: ${webhookKey.substring(0, 80)}...`);
+                      console.log(`[DUPLICATE] Processado em: ${record.processed_at}`);
+                      break;
+                    }
+                  }
+                }
+                
+                if (!messageAlreadyProcessed) {
+                  console.log(`[DB_CHECK] ✅ Mensagem NÃO encontrada no banco - pode processar`);
+                }
+              } catch (dbError) {
+                console.error(`[ERROR] Erro ao verificar no banco: ${dbError.message}`);
+                // Continua processamento se falhar verificação no banco
+              }
+              
+              if (messageAlreadyProcessed) {
+                return new Response(
+                  JSON.stringify({
+                    status: 'accepted',
+                    message: 'Message already processed in database',
+                    duplicate: true,
+                    webhook_key: webhookKey.substring(0, 50),
+                    message_id: webhookData.message?.id || 'N/A',
+                    instance_id: instanceId,
+                    source: 'database_check',
+                  }),
+                  {
+                    status: 200,
+                    headers: {
+                      ...corsHeaders,
+                      'Content-Type': 'application/json',
+                      'X-Duplicate-Detected': 'true',
+                      'X-DB-Check': 'true',
+                    },
+                  }
+                );
+              }
+              
+              // CRÍTICO: Registra no banco ANTES de processar (marca como "processando")
+              // Isso previne que outra requisição simultânea processe a mesma mensagem
+              // SEMPRE registra, mesmo sem message.id (usa webhook_key)
+              try {
+                const insertUrl = `${SUPABASE_URL}/rest/v1/chatwoot_processed_messages`;
+                
+                const insertPayload = {
+                  message_id: webhookData.message?.id?.toString() || `hash_${webhookKey.split(':').pop()}`, // Usa hash se não tiver message.id
+                  instance_id: instanceId,
+                  conversation_id: webhookData.conversation?.id?.toString() || null,
+                  event_type: webhookData.event || 'message_created',
+                  webhook_key: webhookKey, // SEMPRE inclui webhook_key (identificador mais confiável)
+                  processed_at: new Date().toISOString(),
+                };
+                
+                console.log(`[DB_INSERT] Registrando mensagem no banco ANTES de processar...`);
+                console.log(`[DB_INSERT] Payload: message_id=${insertPayload.message_id}, webhook_key=${webhookKey.substring(0, 50)}...`);
+                
+                const insertResponse = await fetch(insertUrl, {
+                  method: 'POST',
+                  headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    // NÃO usa 'Prefer': 'resolution=merge-duplicates' - queremos o erro 409 se duplicado
+                  },
+                  body: JSON.stringify(insertPayload),
+                });
+                
+                if (insertResponse.ok) {
+                  console.log(`[DB_INSERT] ✅ Mensagem registrada no banco ANTES de processar`);
+                } else {
+                  const errorText = await insertResponse.text();
+                  console.log(`[DB_INSERT] Response status: ${insertResponse.status}`);
+                  console.log(`[DB_INSERT] Response: ${errorText.substring(0, 300)}`);
+                  
+                  // Se erro for "duplicate key" ou "unique constraint violation", significa que outra requisição já registrou
+                  if (insertResponse.status === 409 || 
+                      insertResponse.status === 23505 || 
+                      errorText.includes('duplicate') || 
+                      errorText.includes('unique') ||
+                      errorText.includes('violates unique constraint')) {
+                    console.log(`[DUPLICATE] ⚠️⚠️⚠️ CONFLITO! Mensagem já registrada por outra requisição! ⚠️⚠️⚠️`);
+                    console.log(`[DUPLICATE] Webhook Key: ${webhookKey.substring(0, 80)}...`);
+                    console.log(`[DUPLICATE] Instance: ${instanceId}`);
+                    
+                    return new Response(
+                      JSON.stringify({
+                        status: 'accepted',
+                        message: 'Message already being processed by another request',
+                        duplicate: true,
+                        webhook_key: webhookKey.substring(0, 50),
+                        instance_id: instanceId,
+                        source: 'database_conflict',
+                      }),
+                      {
+                        status: 200,
+                        headers: {
+                          ...corsHeaders,
+                          'Content-Type': 'application/json',
+                          'X-Duplicate-Detected': 'true',
+                          'X-DB-Conflict': 'true',
+                        },
+                      }
+                    );
+                  } else {
+                    console.warn(`[WARN] Erro ao registrar no banco (${insertResponse.status}): ${errorText.substring(0, 200)}`);
+                  }
+                }
+              } catch (insertError) {
+                console.error(`[ERROR] Erro ao registrar mensagem no banco: ${insertError.message}`);
+                console.error(`[ERROR] Stack: ${insertError.stack}`);
+                // Não bloqueia processamento se falhar
+              }
+              
+              // OTIMIZAÇÃO: Sistema de lock simplificado e mais rápido
+              // PASSO 1: Tenta adquirir lock com timestamp único
               const processingKey = `processing:${webhookKey}`;
               const lockRequest = new Request(`https://chatwoot-lock/${processingKey}`);
               const lockTimestamp = Date.now();
@@ -867,8 +1027,8 @@ async function handleRequest(request, env = {}, ctx) {
                 if (!existingLock || (existingLock && (Date.now() - (await existingLock.json()).timestamp) >= 8000)) {
                   await cache.put(lockRequest, lockResponse);
                   
-                  // DOUBLE-CHECK: delay suficiente para garantir propagação do cache
-                  await new Promise(resolve => setTimeout(resolve, 40)); // 40ms (balanceado)
+                  // DOUBLE-CHECK: delay otimizado para garantir propagação do cache
+                  await new Promise(resolve => setTimeout(resolve, 20)); // 20ms (otimizado)
                   const verifyLock = await cache.match(lockRequest);
                   if (verifyLock) {
                     const verifyData = await verifyLock.json();
@@ -891,13 +1051,13 @@ async function handleRequest(request, env = {}, ctx) {
                 lockAcquired = false;
               }
               
-              // PASSO 3: Se não conseguiu o lock, aguarda e verifica cache (BALANCEADO)
+              // PASSO 2: Se não conseguiu o lock, aguarda e verifica cache (OTIMIZADO)
               if (!lockAcquired) {
                 console.log(`[DUPLICATE] ⚠️ Não foi possível adquirir lock, aguardando processamento de outra requisição...`);
                 
-                // Aguarda e verifica o cache de resultado (balanceado - mais tentativas que antes)
-                for (let attempt = 0; attempt < 12; attempt++) { // 12 tentativas (balanceado)
-                  const delay = Math.min(80 + (attempt * 40), 300); // Backoff: 80ms → 120ms → 160ms... até 300ms
+                // Aguarda e verifica o cache de resultado (otimizado - menos tentativas, delays menores)
+                for (let attempt = 0; attempt < 6; attempt++) { // 6 tentativas (otimizado)
+                  const delay = Math.min(50 + (attempt * 30), 150); // Backoff: 50ms → 80ms → 110ms... até 150ms
                   await new Promise(resolve => setTimeout(resolve, delay));
                   
                   // Verifica cache primeiro (mais rápido)
@@ -959,7 +1119,7 @@ async function handleRequest(request, env = {}, ctx) {
                 if (!lockAcquired) {
                   try {
                     await cache.put(lockRequest, lockResponse);
-                    await new Promise(resolve => setTimeout(resolve, 40)); // Double-check
+                    await new Promise(resolve => setTimeout(resolve, 20)); // Double-check (otimizado)
                     const verifyLock = await cache.match(lockRequest);
                     if (verifyLock) {
                       const verifyData = await verifyLock.json();
@@ -1001,12 +1161,25 @@ async function handleRequest(request, env = {}, ctx) {
                 );
               }
               
-              console.log(`[INFO] Processando webhook com lock confirmado...`);
+              // OTIMIZAÇÃO: Responde ao Chatwoot IMEDIATAMENTE após adquirir lock
+              // O processamento será feito de forma assíncrona
+              console.log(`[INFO] ✅ Respondendo IMEDIATAMENTE ao Chatwoot (200 OK)`);
+              console.log(`[INFO] Processando webhook com lock confirmado (async)...`);
               
-              // Faz proxy para a API externa com o token da instância
-              console.log(`[INFO] Proxying webhook to UAZAPI: ${targetUrl}`);
-              console.log(`[INFO] Webhook body length: ${webhookBody.length} bytes`);
-              console.log(`[INFO] Instance ID: ${instanceId}, Token preview: ${instanceToken ? instanceToken.substring(0, 20) + '...' : 'NULL'}`);
+              const immediateResponse = new Response(JSON.stringify({ 
+                status: 'accepted',
+                message: 'Webhook received and queued for processing',
+                instance_id: instanceId,
+                processed_async: true
+              }), {
+                status: 200,
+                headers: {
+                  ...corsHeaders,
+                  'Content-Type': 'application/json',
+                  'X-Webhook-Status': 'accepted',
+                  'X-Processing-Async': 'true',
+                },
+              });
               
               // Log do conteúdo do webhook para diagnóstico
               try {
@@ -1026,70 +1199,118 @@ async function handleRequest(request, env = {}, ctx) {
                 console.log(`[DEBUG] Webhook cache key: ${webhookKey.substring(0, 100)}...`);
               }
               
-              const webhookResponse = await fetch(targetUrl, {
-                method: request.method,
-                headers: {
-                  'Content-Type': 'application/json',
-                  'token': instanceToken,
-                },
-                body: webhookBody,
-              });
+              // CRÍTICO: Marca como processando ANTES de processar (evita duplicação)
+              // Armazena um marcador "processando" no cache imediatamente
+              const processingMarker = {
+                timestamp: Date.now(),
+                response: { status: 'processing', message: 'Webhook está sendo processado' },
+                processing: true
+              };
+              await setCachedWebhook(webhookKey, processingMarker, cache);
+              console.log(`[INFO] ✅ Marcador de processamento armazenado no cache ANTES de processar`);
               
-              console.log(`[INFO] UAZAPI webhook response status: ${webhookResponse.status}`);
-              
-              const webhookResponseData = await webhookResponse.text();
-              
-              console.log(`[INFO] UAZAPI webhook response length: ${webhookResponseData.length} bytes`);
-              console.log(`[INFO] UAZAPI webhook response: ${webhookResponseData}`);
-              
-              if (webhookResponse.status === 401) {
-                console.error(`[ERROR] UAZAPI returned 401 Unauthorized. Token may be invalid or expired.`);
-                console.error(`[ERROR] Instance ID: ${instanceId}, Token preview: ${instanceToken ? instanceToken.substring(0, 20) + '...' : 'NULL'}`);
-                console.error(`[ERROR] Target URL: ${targetUrl}`);
-                console.error(`[ERROR] Request method: ${request.method}`);
-                console.error(`[ERROR] This may indicate that the UAZAPI does not accept Chatwoot webhooks directly, or the token is invalid.`);
-              } else if (!webhookResponse.ok) {
-                console.error(`[ERROR] UAZAPI returned error status: ${webhookResponse.status}`);
-                console.error(`[ERROR] Response: ${webhookResponseData.substring(0, 500)}`);
-              } else {
-                console.log(`[INFO] ✅ Webhook processado com sucesso pela UAZAPI (status: ${webhookResponse.status})`);
-              }
-              
-              // Armazena resposta no cache para prevenir duplicação (apenas se sucesso)
-              // OTIMIZAÇÃO: Armazena cache ANTES de liberar lock para garantir que outras requisições encontrem
-              if (webhookResponse.status >= 200 && webhookResponse.status < 300) {
+              // CRÍTICO: Responde IMEDIATAMENTE ao Chatwoot (200 OK) para evitar retry
+              // Processa o webhook de forma assíncrona usando ctx.waitUntil
+              const responsePromise = (async () => {
                 try {
-                  const responseData = JSON.parse(webhookResponseData);
-                  // Armazena cache primeiro (mais importante que liberar lock)
-                  await setCachedWebhook(webhookKey, responseData, cache);
-                  console.log(`[INFO] ✅ Webhook armazenado no cache`);
-                } catch (parseError) {
-                  console.warn(`[WARN] Erro ao armazenar cache: ${parseError.message}`);
+                  console.log(`[INFO] Proxying webhook to UAZAPI (async): ${targetUrl}`);
+                  console.log(`[INFO] Webhook body length: ${webhookBody.length} bytes`);
+                  console.log(`[INFO] Instance ID: ${instanceId}, Token preview: ${instanceToken ? instanceToken.substring(0, 20) + '...' : 'NULL'}`);
+                  
+                  const webhookResponse = await fetch(targetUrl, {
+                    method: request.method,
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'token': instanceToken,
+                    },
+                    body: webhookBody,
+                  });
+                  
+                  console.log(`[INFO] UAZAPI webhook response status: ${webhookResponse.status}`);
+                  
+                  const webhookResponseData = await webhookResponse.text();
+                  
+                  console.log(`[INFO] UAZAPI webhook response length: ${webhookResponseData.length} bytes`);
+                  console.log(`[INFO] UAZAPI webhook response: ${webhookResponseData}`);
+                  
+                  if (webhookResponse.status === 401) {
+                    console.error(`[ERROR] UAZAPI returned 401 Unauthorized. Token may be invalid or expired.`);
+                    console.error(`[ERROR] Instance ID: ${instanceId}, Token preview: ${instanceToken ? instanceToken.substring(0, 20) + '...' : 'NULL'}`);
+                    console.error(`[ERROR] Target URL: ${targetUrl}`);
+                    console.error(`[ERROR] Request method: ${request.method}`);
+                    console.error(`[ERROR] This may indicate that the UAZAPI does not accept Chatwoot webhooks directly, or the token is invalid.`);
+                  } else if (!webhookResponse.ok) {
+                    console.error(`[ERROR] UAZAPI returned error status: ${webhookResponse.status}`);
+                    console.error(`[ERROR] Response: ${webhookResponseData.substring(0, 500)}`);
+                  } else {
+                    console.log(`[INFO] ✅ Webhook processado com sucesso pela UAZAPI (status: ${webhookResponse.status})`);
+                  }
+                  
+                  // Armazena resposta no cache para prevenir duplicação (apenas se sucesso)
+                  // CRÍTICO: Atualiza o cache com a resposta final
+                  if (webhookResponse.status >= 200 && webhookResponse.status < 300) {
+                    try {
+                      const responseData = JSON.parse(webhookResponseData);
+                      // Armazena cache com resposta final (substitui o marcador de processamento)
+                      await setCachedWebhook(webhookKey, responseData, cache);
+                      console.log(`[INFO] ✅ Webhook armazenado no cache com resposta final`);
+                      // Nota: O registro no banco já foi feito ANTES de processar, então não precisa fazer novamente aqui
+                    } catch (parseError) {
+                      console.warn(`[WARN] Erro ao armazenar cache: ${parseError.message}`);
+                    }
+                  } else {
+                    // Se falhou, remove o marcador de processamento após um tempo
+                    // Mas mantém por um tempo curto para evitar reprocessamento imediato
+                    setTimeout(async () => {
+                      try {
+                        await cache.delete(new Request(`https://chatwoot-cache/${webhookKey}`));
+                        console.log(`[INFO] Marcador de processamento removido após falha`);
+                      } catch (e) {
+                        // Ignora erro
+                      }
+                    }, 30000); // Remove após 30 segundos se falhou
+                  }
+                  
+                  console.log(`[INFO] ========================================`);
+                  console.log(`[INFO] ✅ WEBHOOK PROCESSADO COM SUCESSO (async)`);
+                  console.log(`[INFO] Status UAZAPI: ${webhookResponse.status}`);
+                  console.log(`[INFO] Instance ID: ${instanceId}`);
+                  console.log(`[INFO] ========================================`);
+                } catch (asyncError) {
+                  console.error(`[ERROR] Erro ao processar webhook de forma assíncrona: ${asyncError.message}`);
+                  console.error(`[ERROR] Stack: ${asyncError.stack}`);
+                  // Remove marcador de processamento em caso de erro após um tempo
+                  setTimeout(async () => {
+                    try {
+                      await cache.delete(new Request(`https://chatwoot-cache/${webhookKey}`));
+                      console.log(`[INFO] Marcador de processamento removido após erro`);
+                    } catch (e) {
+                      // Ignora erro
+                    }
+                  }, 30000);
+                } finally {
+                  // Remove o lock após processar (libera imediatamente para outras requisições)
+                  if (lockAcquired) {
+                    cache.delete(lockRequest).catch(() => {
+                      // Ignora erro (lock vai expirar sozinho)
+                    });
+                    console.log(`[INFO] Lock liberado`);
+                  }
                 }
-              }
+              })();
               
-              // Remove o lock após processar (libera imediatamente para outras requisições)
-              // OTIMIZAÇÃO: Libera lock em paralelo (não bloqueia resposta)
-              if (lockAcquired) {
-                cache.delete(lockRequest).catch(() => {
-                  // Ignora erro (lock vai expirar sozinho em 5s)
+              // Processa de forma assíncrona usando ctx.waitUntil se disponível
+              if (ctx && typeof ctx.waitUntil === 'function') {
+                ctx.waitUntil(responsePromise);
+              } else {
+                // Fallback: processa em background sem bloquear resposta
+                responsePromise.catch(err => {
+                  console.error(`[ERROR] Erro no processamento assíncrono: ${err.message}`);
                 });
-                console.log(`[INFO] Lock liberado`);
               }
               
-              console.log(`[INFO] ========================================`);
-              console.log(`[INFO] ✅ WEBHOOK PROCESSADO COM SUCESSO`);
-              console.log(`[INFO] Status UAZAPI: ${webhookResponse.status}`);
-              console.log(`[INFO] Instance ID: ${instanceId}`);
-              console.log(`[INFO] ========================================`);
-              
-              return new Response(webhookResponseData, {
-                status: webhookResponse.status,
-                headers: {
-                  ...corsHeaders,
-                  'Content-Type': 'application/json',
-                },
-              });
+              // Retorna resposta imediata (já criada acima)
+              return immediateResponse;
             } else {
               console.error(`[ERROR] ❌ Instância não encontrada ou sem token`);
               console.error(`[ERROR] Instance ID: ${instanceId}`);
@@ -2083,72 +2304,122 @@ async function handleRequest(request, env = {}, ctx) {
                         console.log(`[WARN] Error details: ${JSON.stringify(errorDetails)}`);
                       }
                     } else {
-                      // Cria novo webhook
-                      // Cria novo webhook conforme documentação do Chatwoot
-                      console.log(`[INFO] No existing webhook found, creating new webhook with URL: ${responseJson.webhook_url}`);
-                      const createWebhookPayload = {
-                        url: responseJson.webhook_url,
-                        // subscriptions: eventos padrão para integração WhatsApp conforme documentação
-                        subscriptions: [
-                          'message_created',
-                          'conversation_updated',
-                          'conversation_status_changed',
-                          'contact_created',
-                          'contact_updated'
-                        ]
-                      };
+                      // Verifica se já existe webhook com a mesma URL (pode estar em outra inbox ou sem filtro)
+                      // Isso evita criar webhooks duplicados
+                      const targetPathForDuplicate = responseJson.webhook_url.split('/').pop();
+                      const duplicateWebhook = Array.isArray(existingWebhooks) 
+                        ? existingWebhooks.find(wh => {
+                            const whUrl = wh.url || wh.webhook_url || '';
+                            return whUrl === responseJson.webhook_url || whUrl.includes(targetPathForDuplicate);
+                          })
+                        : null;
                       
-                      console.log(`[INFO] Creating webhook with payload: ${JSON.stringify(createWebhookPayload)}`);
-                      const createWebhookResponse = await fetch(webhooksUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'api_access_token': bodyData.access_token,
-                        },
-                        body: JSON.stringify(createWebhookPayload),
-                      });
-                      
-                      console.log(`[INFO] Create webhook response status: ${createWebhookResponse.status}`);
-                      
-                      if (createWebhookResponse.ok) {
-                        const createdWebhook = await createWebhookResponse.json();
-                        responseJson.webhook_updated_in_chatwoot = true;
-                        responseJson.chatwoot_webhook_response = createdWebhook;
-                        console.log(`[INFO] Webhook created successfully in Chatwoot (ID: ${createdWebhook.id})`);
-                        console.log(`[INFO] Created webhook URL: ${createdWebhook.url}`);
-                      } else {
-                        const errorText = await createWebhookResponse.text();
-                        let errorDetails;
+                      if (duplicateWebhook) {
+                        console.log(`[WARN] ⚠️ Webhook duplicado detectado! Já existe webhook com URL similar (ID: ${duplicateWebhook.id})`);
+                        console.log(`[WARN] URL existente: ${duplicateWebhook.url || duplicateWebhook.webhook_url}`);
+                        console.log(`[WARN] URL nova: ${responseJson.webhook_url}`);
+                        console.log(`[WARN] Isso pode causar mensagens duplicadas! Atualizando webhook existente em vez de criar novo.`);
+                        
+                        // Atualiza o webhook existente em vez de criar novo
                         try {
-                          errorDetails = JSON.parse(errorText);
-                        } catch {
-                          errorDetails = errorText.substring(0, 500);
-                        }
-                        
-                        console.log(`[WARN] Failed to create webhook in Chatwoot: ${createWebhookResponse.status}`);
-                        console.log(`[WARN] Error details: ${JSON.stringify(errorDetails)}`);
-                        
-                        // Se o erro for "Url has already been taken", tenta buscar e atualizar o webhook existente
-                        if (createWebhookResponse.status === 422 && 
-                            errorDetails.message && 
-                            (errorDetails.message.includes('already been taken') || errorDetails.message.includes('already exists'))) {
-                          console.log(`[INFO] Webhook URL already exists, attempting to find and update it`);
-                          
-                          // Busca novamente os webhooks para encontrar o que tem essa URL
-                          // Tenta primeiro com filtro por inbox_id, depois sem filtro
-                          const retryWebhooksUrlWithFilter = `${webhooksUrl}?inbox_id=${bodyData.inbox_id}`;
-                          let retryListResponse = await fetch(retryWebhooksUrlWithFilter, {
-                            method: 'GET',
+                          const updateDuplicateResponse = await fetch(`${webhooksUrl}/${duplicateWebhook.id}`, {
+                            method: 'PATCH',
                             headers: {
+                              'Content-Type': 'application/json',
                               'api_access_token': bodyData.access_token,
                             },
+                            body: JSON.stringify({
+                              url: responseJson.webhook_url,
+                            }),
                           });
                           
-                          // Se não encontrar com filtro, busca todos
-                          if (retryListResponse.ok) {
-                            const filteredWebhooks = await retryListResponse.json();
-                            if (!Array.isArray(filteredWebhooks) || filteredWebhooks.length === 0) {
-                              console.log(`[INFO] No webhooks found with inbox_id filter, trying all webhooks`);
+                          if (updateDuplicateResponse.ok) {
+                            const updatedDuplicate = await updateDuplicateResponse.json();
+                            responseJson.webhook_updated_in_chatwoot = true;
+                            responseJson.chatwoot_webhook_response = updatedDuplicate;
+                            responseJson.webhook_duplicate_prevented = true;
+                            console.log(`[INFO] ✅ Webhook duplicado atualizado com sucesso (ID: ${duplicateWebhook.id})`);
+                          } else {
+                            console.log(`[WARN] Falha ao atualizar webhook duplicado: ${updateDuplicateResponse.status}`);
+                          }
+                        } catch (updateError) {
+                          console.error(`[ERROR] Erro ao atualizar webhook duplicado: ${updateError.message}`);
+                        }
+                      } else {
+                        // Cria novo webhook apenas se não houver duplicado
+                        // Cria novo webhook conforme documentação do Chatwoot
+                        console.log(`[INFO] No existing webhook found, creating new webhook with URL: ${responseJson.webhook_url}`);
+                        const createWebhookPayload = {
+                          url: responseJson.webhook_url,
+                          // subscriptions: eventos padrão para integração WhatsApp conforme documentação
+                          subscriptions: [
+                            'message_created',
+                            'conversation_updated',
+                            'conversation_status_changed',
+                            'contact_created',
+                            'contact_updated'
+                          ]
+                        };
+                        
+                        console.log(`[INFO] Creating webhook with payload: ${JSON.stringify(createWebhookPayload)}`);
+                        const createWebhookResponse = await fetch(webhooksUrl, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'api_access_token': bodyData.access_token,
+                          },
+                          body: JSON.stringify(createWebhookPayload),
+                        });
+                        
+                        console.log(`[INFO] Create webhook response status: ${createWebhookResponse.status}`);
+                        
+                        if (createWebhookResponse.ok) {
+                          const createdWebhook = await createWebhookResponse.json();
+                          responseJson.webhook_updated_in_chatwoot = true;
+                          responseJson.chatwoot_webhook_response = createdWebhook;
+                          console.log(`[INFO] Webhook created successfully in Chatwoot (ID: ${createdWebhook.id})`);
+                          console.log(`[INFO] Created webhook URL: ${createdWebhook.url}`);
+                        } else {
+                          const errorText = await createWebhookResponse.text();
+                          let errorDetails;
+                          try {
+                            errorDetails = JSON.parse(errorText);
+                          } catch {
+                            errorDetails = errorText.substring(0, 500);
+                          }
+                          
+                          console.log(`[WARN] Failed to create webhook in Chatwoot: ${createWebhookResponse.status}`);
+                          console.log(`[WARN] Error details: ${JSON.stringify(errorDetails)}`);
+                          
+                          // Se o erro for "Url has already been taken", tenta buscar e atualizar o webhook existente
+                          if (createWebhookResponse.status === 422 && 
+                              errorDetails.message && 
+                              (errorDetails.message.includes('already been taken') || errorDetails.message.includes('already exists'))) {
+                            console.log(`[INFO] Webhook URL already exists, attempting to find and update it`);
+                            
+                            // Busca novamente os webhooks para encontrar o que tem essa URL
+                            // Tenta primeiro com filtro por inbox_id, depois sem filtro
+                            const retryWebhooksUrlWithFilter = `${webhooksUrl}?inbox_id=${bodyData.inbox_id}`;
+                            let retryListResponse = await fetch(retryWebhooksUrlWithFilter, {
+                              method: 'GET',
+                              headers: {
+                                'api_access_token': bodyData.access_token,
+                              },
+                            });
+                            
+                            // Se não encontrar com filtro, busca todos
+                            if (retryListResponse.ok) {
+                              const filteredWebhooks = await retryListResponse.json();
+                              if (!Array.isArray(filteredWebhooks) || filteredWebhooks.length === 0) {
+                                console.log(`[INFO] No webhooks found with inbox_id filter, trying all webhooks`);
+                                retryListResponse = await fetch(webhooksUrl, {
+                                  method: 'GET',
+                                  headers: {
+                                    'api_access_token': bodyData.access_token,
+                                  },
+                                });
+                              }
+                            } else {
                               retryListResponse = await fetch(webhooksUrl, {
                                 method: 'GET',
                                 headers: {
@@ -2156,129 +2427,122 @@ async function handleRequest(request, env = {}, ctx) {
                                 },
                               });
                             }
-                          } else {
-                            retryListResponse = await fetch(webhooksUrl, {
-                              method: 'GET',
-                              headers: {
-                                'api_access_token': bodyData.access_token,
-                              },
-                            });
-                          }
-                          
-                          if (retryListResponse.ok) {
-                            const allWebhooks = await retryListResponse.json();
-                            console.log(`[INFO] Found ${Array.isArray(allWebhooks) ? allWebhooks.length : 0} webhooks in Chatwoot`);
                             
-                            if (DEBUG_MODE && Array.isArray(allWebhooks) && allWebhooks.length > 0) {
-                              console.log(`[DEBUG] Webhooks list: ${JSON.stringify(allWebhooks.map(wh => ({ id: wh.id, url: wh.url || wh.webhook_url, inbox_id: wh.inbox_id })), null, 2)}`);
-                            }
-                            
-                            if (DEBUG_MODE && Array.isArray(allWebhooks)) {
-                              console.log(`[DEBUG] Webhooks list: ${JSON.stringify(allWebhooks.map(wh => ({ id: wh.id, url: wh.url || wh.webhook_url, inbox_id: wh.inbox_id })), null, 2)}`);
-                            }
-                            
-                            // Busca mais flexível - verifica URL exata, URL parcial, ou inbox_id
-                            const matchingWebhook = Array.isArray(allWebhooks) 
-                              ? allWebhooks.find((wh) => {
-                                  const whUrl = wh.url || wh.webhook_url || '';
-                                  const targetUrl = responseJson.webhook_url;
-                                  
-                                  // Verifica URL exata
-                                  if (whUrl === targetUrl) {
-                                    console.log(`[INFO] Found webhook by exact URL match`);
-                                    return true;
-                                  }
-                                  
-                                  // Verifica se ambas as URLs contêm o mesmo path final (última parte após a última barra)
-                                  const whPath = whUrl.split('/').pop();
-                                  const targetPath = targetUrl.split('/').pop();
-                                  if (whPath && targetPath && whPath === targetPath) {
-                                    console.log(`[INFO] Found webhook by path match: ${whPath}`);
-                                    return true;
-                                  }
-                                  
-                                  // Verifica inbox_id como fallback
-                                  if (wh.inbox_id && wh.inbox_id.toString() === bodyData.inbox_id.toString()) {
-                                    console.log(`[INFO] Found webhook by inbox_id match: ${wh.inbox_id}`);
-                                    return true;
-                                  }
-                                  
-                                  return false;
-                                })
-                              : null;
-                            
-                            if (matchingWebhook) {
-                              console.log(`[INFO] Found existing webhook with matching URL (ID: ${matchingWebhook.id}), updating it`);
-                              const updateExistingResponse = await fetch(`${webhooksUrl}/${matchingWebhook.id}`, {
-                                method: 'PATCH',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'api_access_token': bodyData.access_token,
-                                },
-                                body: JSON.stringify({
-                                  url: responseJson.webhook_url,
-                                  inbox_id: parseInt(bodyData.inbox_id)
-                                }),
-                              });
+                            if (retryListResponse.ok) {
+                              const allWebhooks = await retryListResponse.json();
+                              console.log(`[INFO] Found ${Array.isArray(allWebhooks) ? allWebhooks.length : 0} webhooks in Chatwoot`);
                               
-                              if (updateExistingResponse.ok) {
-                                responseJson.webhook_updated_in_chatwoot = true;
-                                console.log(`[INFO] Successfully updated existing webhook in Chatwoot`);
-                              } else {
-                                const updateErrorText = await updateExistingResponse.text();
-                                let updateErrorDetails;
-                                try {
-                                  updateErrorDetails = JSON.parse(updateErrorText);
-                                } catch {
-                                  updateErrorDetails = updateErrorText.substring(0, 200);
+                              if (DEBUG_MODE && Array.isArray(allWebhooks) && allWebhooks.length > 0) {
+                                console.log(`[DEBUG] Webhooks list: ${JSON.stringify(allWebhooks.map(wh => ({ id: wh.id, url: wh.url || wh.webhook_url, inbox_id: wh.inbox_id })), null, 2)}`);
+                              }
+                              
+                              if (DEBUG_MODE && Array.isArray(allWebhooks)) {
+                                console.log(`[DEBUG] Webhooks list: ${JSON.stringify(allWebhooks.map(wh => ({ id: wh.id, url: wh.url || wh.webhook_url, inbox_id: wh.inbox_id })), null, 2)}`);
+                              }
+                              
+                              // Busca mais flexível - verifica URL exata, URL parcial, ou inbox_id
+                              const matchingWebhook = Array.isArray(allWebhooks) 
+                                ? allWebhooks.find((wh) => {
+                                    const whUrl = wh.url || wh.webhook_url || '';
+                                    const targetUrl = responseJson.webhook_url;
+                                    
+                                    // Verifica URL exata
+                                    if (whUrl === targetUrl) {
+                                      console.log(`[INFO] Found webhook by exact URL match`);
+                                      return true;
+                                    }
+                                    
+                                    // Verifica se ambas as URLs contêm o mesmo path final (última parte após a última barra)
+                                    const whPath = whUrl.split('/').pop();
+                                    const targetPath = targetUrl.split('/').pop();
+                                    if (whPath && targetPath && whPath === targetPath) {
+                                      console.log(`[INFO] Found webhook by path match: ${whPath}`);
+                                      return true;
+                                    }
+                                    
+                                    // Verifica inbox_id como fallback
+                                    if (wh.inbox_id && wh.inbox_id.toString() === bodyData.inbox_id.toString()) {
+                                      console.log(`[INFO] Found webhook by inbox_id match: ${wh.inbox_id}`);
+                                      return true;
+                                    }
+                                    
+                                    return false;
+                                  })
+                                : null;
+                              
+                              if (matchingWebhook) {
+                                console.log(`[INFO] Found existing webhook with matching URL (ID: ${matchingWebhook.id}), updating it`);
+                                const updateExistingResponse = await fetch(`${webhooksUrl}/${matchingWebhook.id}`, {
+                                  method: 'PATCH',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'api_access_token': bodyData.access_token,
+                                  },
+                                  body: JSON.stringify({
+                                    url: responseJson.webhook_url,
+                                    inbox_id: parseInt(bodyData.inbox_id)
+                                  }),
+                                });
+                                
+                                if (updateExistingResponse.ok) {
+                                  responseJson.webhook_updated_in_chatwoot = true;
+                                  console.log(`[INFO] Successfully updated existing webhook in Chatwoot`);
+                                } else {
+                                  const updateErrorText = await updateExistingResponse.text();
+                                  let updateErrorDetails;
+                                  try {
+                                    updateErrorDetails = JSON.parse(updateErrorText);
+                                  } catch {
+                                    updateErrorDetails = updateErrorText.substring(0, 200);
+                                  }
+                                  responseJson.webhook_updated_in_chatwoot = false;
+                                  responseJson.webhook_update_error = {
+                                    error: `HTTP ${updateExistingResponse.status}`,
+                                    details: updateErrorDetails
+                                  };
+                                  console.log(`[WARN] Failed to update existing webhook: ${updateExistingResponse.status}`);
                                 }
+                              } else {
                                 responseJson.webhook_updated_in_chatwoot = false;
                                 responseJson.webhook_update_error = {
-                                  error: `HTTP ${updateExistingResponse.status}`,
-                                  details: updateErrorDetails
+                                  error: `HTTP ${createWebhookResponse.status}`,
+                                  details: errorDetails,
+                                  note: 'Webhook URL already exists but could not find it to update'
                                 };
-                                console.log(`[WARN] Failed to update existing webhook: ${updateExistingResponse.status}`);
+                                // Se não encontrou o webhook na lista mas o erro diz que já existe,
+                                // isso confirma que o webhook está configurado diretamente na inbox
+                                // O Chatwoot não permite atualizar webhook_url via API quando está configurado na inbox
+                                responseJson.webhook_updated_in_chatwoot = false;
+                                responseJson.webhook_update_error = {
+                                  error: `HTTP ${createWebhookResponse.status}`,
+                                  details: errorDetails,
+                                  note: 'Webhook URL already exists in Chatwoot. The webhook is configured directly in the inbox settings (not as a separate webhook). Chatwoot API does not allow updating inbox webhook_url via API for security reasons.',
+                                  suggestion: 'To update the webhook URL, please go to Chatwoot UI → Settings → Inboxes → Select your inbox → Settings → Webhook URL and update it manually. The new URL is provided in the webhook_url field above.',
+                                  chatwoot_limitation: 'This is a known Chatwoot API limitation. Inbox webhook URLs can only be updated via the Chatwoot UI, not via API.'
+                                };
+                                console.log(`[WARN] Webhook URL exists but could not find it in the webhooks list. Confirmed: webhook is configured directly in inbox settings.`);
+                                console.log(`[INFO] Chatwoot API limitation: inbox webhook_url cannot be updated via API. Manual update required in Chatwoot UI.`);
                               }
                             } else {
                               responseJson.webhook_updated_in_chatwoot = false;
                               responseJson.webhook_update_error = {
                                 error: `HTTP ${createWebhookResponse.status}`,
-                                details: errorDetails,
-                                note: 'Webhook URL already exists but could not find it to update'
+                                details: errorDetails
                               };
-                              // Se não encontrou o webhook na lista mas o erro diz que já existe,
-                              // isso confirma que o webhook está configurado diretamente na inbox
-                              // O Chatwoot não permite atualizar webhook_url via API quando está configurado na inbox
-                              responseJson.webhook_updated_in_chatwoot = false;
-                              responseJson.webhook_update_error = {
-                                error: `HTTP ${createWebhookResponse.status}`,
-                                details: errorDetails,
-                                note: 'Webhook URL already exists in Chatwoot. The webhook is configured directly in the inbox settings (not as a separate webhook). Chatwoot API does not allow updating inbox webhook_url via API for security reasons.',
-                                suggestion: 'To update the webhook URL, please go to Chatwoot UI → Settings → Inboxes → Select your inbox → Settings → Webhook URL and update it manually. The new URL is provided in the webhook_url field above.',
-                                chatwoot_limitation: 'This is a known Chatwoot API limitation. Inbox webhook URLs can only be updated via the Chatwoot UI, not via API.'
-                              };
-                              console.log(`[WARN] Webhook URL exists but could not find it in the webhooks list. Confirmed: webhook is configured directly in inbox settings.`);
-                              console.log(`[INFO] Chatwoot API limitation: inbox webhook_url cannot be updated via API. Manual update required in Chatwoot UI.`);
                             }
                           } else {
                             responseJson.webhook_updated_in_chatwoot = false;
                             responseJson.webhook_update_error = {
                               error: `HTTP ${createWebhookResponse.status}`,
-                              details: errorDetails
+                              details: errorDetails,
+                              payload_sent: {
+                                url: responseJson.webhook_url,
+                                inbox_id: parseInt(bodyData.inbox_id)
+                              }
                             };
+                            console.log(`[WARN] Failed to create webhook in Chatwoot: ${createWebhookResponse.status}`);
+                            console.log(`[WARN] Error details: ${JSON.stringify(errorDetails)}`);
                           }
-                        } else {
-                          responseJson.webhook_updated_in_chatwoot = false;
-                          responseJson.webhook_update_error = {
-                            error: `HTTP ${createWebhookResponse.status}`,
-                            details: errorDetails,
-                            payload_sent: {
-                              url: responseJson.webhook_url,
-                              inbox_id: parseInt(bodyData.inbox_id)
-                            }
-                          };
-                          console.log(`[WARN] Failed to create webhook in Chatwoot: ${createWebhookResponse.status}`);
-                          console.log(`[WARN] Error details: ${JSON.stringify(errorDetails)}`);
                         }
                       }
                     }
@@ -2299,81 +2563,81 @@ async function handleRequest(request, env = {}, ctx) {
                   };
                   console.error(`[ERROR] Webhook endpoint error: ${webhookError.message}`);
                 }
-               }
-               
-               // Aplica substituição recursiva final em todo o responseJson (incluindo chatwoot_response se existir)
-               // Isso garante que qualquer URL com sender.uazapi.com seja substituída
-               responseJson = replaceWebhookUrls(responseJson);
-               console.log(`[INFO] Applied final recursive URL replacement after Chatwoot update attempt`);
-               
-               // UPDATE ADICIONAL: Faz update do channel sempre que possível (mesmo se webhook_updated_in_chatwoot for false)
-               // Isso garante que o webhook_url seja atualizado no channel mesmo quando o webhook já existe
-               if (response.ok && 
-                   responseJson.webhook_url && 
-                   bodyData && 
-                   bodyData.url && 
-                   bodyData.access_token && 
-                   bodyData.account_id && 
-                   bodyData.inbox_id) {
-                 try {
-                   console.log(`[INFO] Webhook atualizado com sucesso, fazendo update adicional do channel...`);
-                   const chatwootBaseUrl = bodyData.url.endsWith('/') ? bodyData.url.slice(0, -1) : bodyData.url;
-                   const channelUpdateUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.account_id}/inboxes/${bodyData.inbox_id}`;
-                   
-                   const channelUpdateResponse = await fetch(channelUpdateUrl, {
-                     method: 'PATCH',
-                     headers: {
-                       'Content-Type': 'application/json',
-                       'api_access_token': bodyData.access_token,
-                     },
-                     body: JSON.stringify({
-                       channel: {
-                         webhook_url: responseJson.webhook_url
-                       }
-                     }),
-                   });
-                   
-                   if (channelUpdateResponse.ok) {
-                     const channelUpdateData = await channelUpdateResponse.json();
-                     responseJson.channel_update_response = channelUpdateData;
-                     console.log(`[INFO] ✅ Channel atualizado com sucesso via PATCH /inboxes/{id}`);
-                     
-                     // Verifica se o webhook_url foi realmente atualizado no channel
-                     if (channelUpdateData.channel && channelUpdateData.channel.webhook_url === responseJson.webhook_url) {
-                       responseJson.channel_webhook_updated = true;
-                       console.log(`[INFO] ✅ Channel webhook_url confirmado: ${channelUpdateData.channel.webhook_url}`);
-                     } else if (channelUpdateData.webhook_url === responseJson.webhook_url) {
-                       // Pode estar no nível raiz também
-                       responseJson.channel_webhook_updated = true;
-                       console.log(`[INFO] ✅ Channel webhook_url confirmado (nível raiz): ${channelUpdateData.webhook_url}`);
-                     } else {
-                       console.log(`[WARN] Channel PATCH retornou OK mas webhook_url não foi atualizado. Response: ${JSON.stringify(channelUpdateData).substring(0, 200)}`);
-                     }
-                   } else {
-                     const errorText = await channelUpdateResponse.text();
-                     let errorDetails;
-                     try {
-                       errorDetails = JSON.parse(errorText);
-                     } catch {
-                       errorDetails = errorText.substring(0, 200);
-                     }
-                     responseJson.channel_update_error = {
-                       error: `HTTP ${channelUpdateResponse.status}`,
-                       details: errorDetails
-                     };
-                     console.log(`[WARN] Falha ao atualizar channel: ${channelUpdateResponse.status} - ${JSON.stringify(errorDetails)}`);
-                   }
-                 } catch (channelUpdateError) {
-                   responseJson.channel_update_error = {
-                     error: 'Erro ao tentar atualizar channel',
-                     message: channelUpdateError.message
-                   };
-                   console.error(`[ERROR] Erro ao atualizar channel: ${channelUpdateError.message}`);
-                 }
-               }
-               
-               // Atualiza responseData com o resultado da atualização do Chatwoot
-               responseData = JSON.stringify(responseJson);
+              }
+              
+              // Aplica substituição recursiva final em todo o responseJson (incluindo chatwoot_response se existir)
+              // Isso garante que qualquer URL com sender.uazapi.com seja substituída
+              responseJson = replaceWebhookUrls(responseJson);
+              console.log(`[INFO] Applied final recursive URL replacement after Chatwoot update attempt`);
+              
+              // UPDATE ADICIONAL: Faz update do channel sempre que possível (mesmo se webhook_updated_in_chatwoot for false)
+              // Isso garante que o webhook_url seja atualizado no channel mesmo quando o webhook já existe
+              if (response.ok && 
+                  responseJson.webhook_url && 
+                  bodyData && 
+                  bodyData.url && 
+                  bodyData.access_token && 
+                  bodyData.account_id && 
+                  bodyData.inbox_id) {
+                try {
+                  console.log(`[INFO] Webhook atualizado com sucesso, fazendo update adicional do channel...`);
+                  const chatwootBaseUrl = bodyData.url.endsWith('/') ? bodyData.url.slice(0, -1) : bodyData.url;
+                  const channelUpdateUrl = `${chatwootBaseUrl}/api/v1/accounts/${bodyData.account_id}/inboxes/${bodyData.inbox_id}`;
+                  
+                  const channelUpdateResponse = await fetch(channelUpdateUrl, {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'api_access_token': bodyData.access_token,
+                    },
+                    body: JSON.stringify({
+                      channel: {
+                        webhook_url: responseJson.webhook_url
+                      }
+                    }),
+                  });
+                  
+                  if (channelUpdateResponse.ok) {
+                    const channelUpdateData = await channelUpdateResponse.json();
+                    responseJson.channel_update_response = channelUpdateData;
+                    console.log(`[INFO] ✅ Channel atualizado com sucesso via PATCH /inboxes/{id}`);
+                    
+                    // Verifica se o webhook_url foi realmente atualizado no channel
+                    if (channelUpdateData.channel && channelUpdateData.channel.webhook_url === responseJson.webhook_url) {
+                      responseJson.channel_webhook_updated = true;
+                      console.log(`[INFO] ✅ Channel webhook_url confirmado: ${channelUpdateData.channel.webhook_url}`);
+                    } else if (channelUpdateData.webhook_url === responseJson.webhook_url) {
+                      // Pode estar no nível raiz também
+                      responseJson.channel_webhook_updated = true;
+                      console.log(`[INFO] ✅ Channel webhook_url confirmado (nível raiz): ${channelUpdateData.webhook_url}`);
+                    } else {
+                      console.log(`[WARN] Channel PATCH retornou OK mas webhook_url não foi atualizado. Response: ${JSON.stringify(channelUpdateData).substring(0, 200)}`);
+                    }
+                  } else {
+                    const errorText = await channelUpdateResponse.text();
+                    let errorDetails;
+                    try {
+                      errorDetails = JSON.parse(errorText);
+                    } catch {
+                      errorDetails = errorText.substring(0, 200);
+                    }
+                    responseJson.channel_update_error = {
+                      error: `HTTP ${channelUpdateResponse.status}`,
+                      details: errorDetails
+                    };
+                    console.log(`[WARN] Falha ao atualizar channel: ${channelUpdateResponse.status} - ${JSON.stringify(errorDetails)}`);
+                  }
+                } catch (channelUpdateError) {
+                  responseJson.channel_update_error = {
+                    error: 'Erro ao tentar atualizar channel',
+                    message: channelUpdateError.message
+                  };
+                  console.error(`[ERROR] Erro ao atualizar channel: ${channelUpdateError.message}`);
+                }
+              }
+              
+              // Atualiza responseData com o resultado da atualização do Chatwoot
+              responseData = JSON.stringify(responseJson);
             } catch (chatwootError) {
               responseJson.webhook_updated_in_chatwoot = false;
               responseJson.webhook_update_error = {

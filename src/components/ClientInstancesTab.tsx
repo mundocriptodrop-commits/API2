@@ -1477,6 +1477,23 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     }
   }
 
+  async function handleGenerateProvisionalLink(instance: WhatsAppInstance) {
+    try {
+      const result = await whatsappApi.generateProvisionalLink(instance.id, 24);
+      
+      // Copia o link para a área de transferência
+      await navigator.clipboard.writeText(result.link);
+      
+      showToast(`Link provisório gerado e copiado! O link expira em 24 horas.`, 'success');
+      
+      // Opcional: Abre o link em nova aba
+      // window.open(result.link, '_blank');
+    } catch (error: any) {
+      console.error('Error generating provisional link:', error);
+      showToast(error.message || 'Erro ao gerar link provisório', 'error');
+    }
+  }
+
   function handleDeleteInstance(instance: WhatsAppInstance) {
     showConfirm(
       'Excluir Instância',
@@ -1713,13 +1730,23 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
                 <div className="flex flex-wrap gap-2">
                   {instance.status === 'disconnected' && (
-                    <button
-                      onClick={() => openConnectModal(instance)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-100"
-                    >
-                      <Power className="h-4 w-4" />
-                      Conectar
-                    </button>
+                    <>
+                      <button
+                        onClick={() => openConnectModal(instance)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-100"
+                      >
+                        <Power className="h-4 w-4" />
+                        Conectar
+                      </button>
+                      <button
+                        onClick={() => handleGenerateProvisionalLink(instance)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-100"
+                        title="Gerar link provisório para compartilhar com cliente"
+                      >
+                        <Link className="h-4 w-4" />
+                        Link Provisório
+                      </button>
+                    </>
                   )}
 
                   {instance.status === 'connecting' && (
