@@ -161,40 +161,33 @@
         const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
         
-        const response = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`, {
+        // Busca QR code via UAZAPI diretamente usando a Edge Function como proxy
+        const response = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}&json=true`, {
           headers: {
             'apikey': supabaseAnonKey,
-            'Accept': 'text/html',
+            'Accept': 'application/json',
           },
         });
 
         if (!response.ok) {
-          throw new Error('Erro ao carregar link');
-        }
-
-        const html = await response.text();
-        
-        // Se a resposta contém "Conectado", mostra sucesso
-        if (html.includes('Conectado') || html.includes('✅')) {
-          document.getElementById('content').innerHTML = `
-            <h1>✅ Conectado!</h1>
-            <div class="status" style="background: #e8f5e9; color: #2e7d32;">
-              <p>WhatsApp Conectado com Sucesso!</p>
-              <p style="margin-top: 10px;">Você pode fechar esta página.</p>
-            </div>
-          `;
-          return;
-        }
-
-        // Extrai informações do HTML retornado
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const container = doc.querySelector('.container');
-        
-        if (container) {
-          document.getElementById('content').innerHTML = container.innerHTML;
-        } else {
-          // Fallback: tenta extrair QR code diretamente
+          // Se não retornar JSON, tenta buscar HTML e extrair
+          const htmlResponse = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`, {
+            headers: { 'apikey': supabaseAnonKey, 'Accept': 'text/html' },
+          });
+          const html = await htmlResponse.text();
+          
+          if (html.includes('Conectado') || html.includes('✅')) {
+            document.getElementById('content').innerHTML = `
+              <h1>✅ Conectado!</h1>
+              <div class="status" style="background: #e8f5e9; color: #2e7d32;">
+                <p>WhatsApp Conectado com Sucesso!</p>
+                <p style="margin-top: 10px;">Você pode fechar esta página.</p>
+              </div>
+            `;
+            return;
+          }
+          
+          // Extrai QR code do HTML
           const qrMatch = html.match(/<img[^>]+src="([^"]+)"[^>]*alt="QR Code"/);
           const pairingMatch = html.match(/<div class="pairing-code">([^<]+)<\/div>/);
           const instanceMatch = html.match(/<div class="instance-name">([^<]+)<\/div>/);
@@ -229,23 +222,88 @@
           `;
           
           document.getElementById('content').innerHTML = content;
+        } else {
+          // Se retornou JSON, processa normalmente
+          const data = await response.json();
+          
+          if (data.connected) {
+            document.getElementById('content').innerHTML = `
+              <h1>✅ Conectado!</h1>
+              <div class="status" style="background: #e8f5e9; color: #2e7d32;">
+                <p>WhatsApp Conectado com Sucesso!</p>
+                <p style="margin-top: 10px;">Você pode fechar esta página.</p>
+              </div>
+            `;
+            return;
+          }
+          
+          let content = '';
+          if (data.instance_name) {
+            content += `<div class="instance-name">${data.instance_name}</div>`;
+          }
+          if (data.qr_code) {
+            content += `
+              <p class="description">Escaneie o QR Code abaixo com seu WhatsApp para conectar</p>
+              <div class="qr-container">
+                <img src="${data.qr_code}" alt="QR Code" class="qr-code" />
+              </div>
+            `;
+          }
+          if (data.pairing_code) {
+            content += `
+              <div class="pairing-container">
+                <p class="pairing-label">Ou use o código de pareamento:</p>
+                <div class="pairing-code">${data.pairing_code}</div>
+                <p class="pairing-instructions">Configurações → Aparelhos conectados → Conectar um aparelho</p>
+              </div>
+            `;
+          }
+          content += `
+            <div class="status status-margin">
+              <p class="status-text">⏳ Aguardando conexão...</p>
+              <p class="status-subtext">Recarregue esta página para verificar se já conectou</p>
+              <a href="?token=${linkToken}" class="reload-link">🔄 Recarregar Página</a>
+            </div>
+          `;
+          
+          document.getElementById('content').innerHTML = content;
         }
 
         // Verifica conexão a cada 3 segundos
-        setInterval(async () => {
+        const checkInterval = setInterval(async () => {
           try {
-            const checkResponse = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`, {
-              headers: { 'apikey': supabaseAnonKey, 'Accept': 'text/html' },
+            const checkResponse = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}&json=true`, {
+              headers: { 'apikey': supabaseAnonKey, 'Accept': 'application/json' },
             });
-            const checkHtml = await checkResponse.text();
-            if (checkHtml.includes('Conectado') || checkHtml.includes('✅')) {
-              document.getElementById('content').innerHTML = `
-                <h1>✅ Conectado!</h1>
-                <div class="status" style="background: #e8f5e9; color: #2e7d32;">
-                  <p>WhatsApp Conectado com Sucesso!</p>
-                  <p style="margin-top: 10px;">Você pode fechar esta página.</p>
-                </div>
-              `;
+            
+            if (checkResponse.ok) {
+              const checkData = await checkResponse.json();
+              if (checkData.connected) {
+                clearInterval(checkInterval);
+                document.getElementById('content').innerHTML = `
+                  <h1>✅ Conectado!</h1>
+                  <div class="status" style="background: #e8f5e9; color: #2e7d32;">
+                    <p>WhatsApp Conectado com Sucesso!</p>
+                    <p style="margin-top: 10px;">Você pode fechar esta página.</p>
+                  </div>
+                `;
+              }
+            } else {
+              // Fallback: verifica HTML
+              const checkHtmlResponse = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`, {
+                headers: { 'apikey': supabaseAnonKey, 'Accept': 'text/html' },
+              });
+              const checkHtml = await checkHtmlResponse.text();
+              if (checkHtml.includes('Conectado') || checkHtml.includes('✅')) {
+                clearInterval(checkInterval);
+                document.getElementById('content').innerHTML = `
+                  <h1>✅ Conectado!</h1>
+                  <div class="status" style="background: #e8f5e9; color: #2e7d32;">
+                    <p>WhatsApp Conectado com Sucesso!</p>
+                    <p style="margin-top: 10px;">Você pode fechar esta página.</p>
+                  </div>
+                `;
+              }
             }
           } catch (e) {
             console.error('Error checking status:', e);
