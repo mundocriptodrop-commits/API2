@@ -34,7 +34,7 @@ interface ClientInstancesTabProps {
 }
 
 export default function ClientInstancesTab({ openCreate = false, onCloseCreate }: ClientInstancesTabProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, isSubUser } = useAuth();
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -63,6 +63,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   const [viewMode, setViewMode] = useState<'all' | 'mine' | 'sub-users'>('all');
   const [subUsers, setSubUsers] = useState<Array<{id: string, email: string}>>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [connectToUserId, setConnectToUserId] = useState<string>('');
 
   const summary = useMemo(() => {
     const allInstances = instances; // Já inclui próprias + sub-usuários
@@ -1106,6 +1107,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           // Abrir modal de conexão - usuário escolhe como conectar (QR code ou número)
           setSelectedInstance(newInstance);
           setPhoneNumber('');
+          setConnectToUserId(newInstance.user_id); // Inicializar com o dono atual
           setQrCode('');
           setPairingCode('');
           setShowConnectModal(true);
@@ -1128,6 +1130,24 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     if (selectedInstance.status !== 'disconnected') {
       showToast('A instância precisa estar desconectada para conectar novamente', 'error');
       return;
+    }
+
+    // Se o usuário selecionou uma conta diferente, transferir a instância
+    if (connectToUserId && connectToUserId !== selectedInstance.user_id && !isSubUser) {
+      try {
+        await supabase
+          .from('whatsapp_instances')
+          .update({ user_id: connectToUserId })
+          .eq('id', selectedInstance.id);
+        
+        // Atualizar selectedInstance para refletir a mudança
+        selectedInstance.user_id = connectToUserId;
+        showToast(`Instância transferida para ${subUsers.find(u => u.id === connectToUserId)?.email || 'subconta'}`, 'success');
+      } catch (error) {
+        console.error('Error transferring instance:', error);
+        showToast('Erro ao transferir instância', 'error');
+        return;
+      }
     }
 
     setShowDisconnectOption(false);
@@ -1346,6 +1366,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           setShowConnectModal(false);
           setQrCode('');
           setPairingCode('');
+          setConnectToUserId('');
           setIsConnecting(false);
           loadInstances();
           showToast('Instância conectada com sucesso!', 'success');
@@ -1536,6 +1557,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       setQrCode('');
       setPairingCode('');
       setPhoneNumber('');
+      setConnectToUserId('');
       setShowDisconnectOption(false);
       setIsConnecting(false);
 
@@ -1584,6 +1606,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   function openConnectModal(instance: WhatsAppInstance) {
     setSelectedInstance(instance);
     setPhoneNumber('');
+    setConnectToUserId(instance.user_id); // Inicializar com o dono atual
     
     // Carregar QR code e pairing code do banco se existirem
     const savedQrCode = instance.qr_code || '';
@@ -1660,7 +1683,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       <div className="rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="max-w-xl space-y-3">
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-400">Minhas Instâncias</p>
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-400">{isSubUser ? 'Minhas Instâncias' : 'Instâncias'}</p>
             <h1 className="text-3xl font-semibold leading-tight text-slate-900">Gerencie suas conexões WhatsApp</h1>
             <p className="text-sm text-slate-500">
               Conecte, desconecte e monitore cada instância em tempo real. As métricas completas continuam disponíveis no Dashboard.
@@ -1990,6 +2013,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     </ul>
                   </div>
 
+                  {!isSubUser && subUsers.length > 0 && selectedInstance.user_id === user?.id && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Conectar para
+                      </label>
+                      <select
+                        value={connectToUserId}
+                        onChange={(e) => setConnectToUserId(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      >
+                        <option value={user?.id}>Minha conta ({profile?.email})</option>
+                        {subUsers.map(subUser => (
+                          <option key={subUser.id} value={subUser.id}>
+                            {subUser.email}
+                          </option>
+                        ))}
+                      </select>
+                      {connectToUserId !== user?.id && (
+                        <p className="mt-1 text-xs text-blue-600">
+                          Esta instância será transferida para {subUsers.find(u => u.id === connectToUserId)?.email} após a conexão
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Número de Telefone (opcional)
@@ -2060,6 +2108,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   setQrCode('');
                   setPairingCode('');
                   setPhoneNumber('');
+                  setConnectToUserId('');
                   setShowDisconnectOption(false);
                   setIsConnecting(false);
                 }}

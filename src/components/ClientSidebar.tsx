@@ -16,7 +16,7 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
     restricted?: boolean;
   }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'instances', label: 'Minhas Instâncias', icon: MessageCircle },
+    { id: 'instances', label: isSubUser ? 'Minhas Instâncias' : 'Instâncias', icon: MessageCircle },
     { id: 'sub-users', label: 'Sub-usuários', icon: Users, restricted: true },
     { id: 'activity', label: 'Atividades', icon: Activity, restricted: true },
     { id: 'subscription', label: 'Planos', icon: Package, restricted: true },
