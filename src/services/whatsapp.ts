@@ -253,38 +253,4 @@ export const whatsappApi = {
     return response.json();
   },
 
-  async generateProvisionalLink(instanceId: string, expiresHours?: number): Promise<{
-    success: boolean;
-    link: string;
-    token: string;
-    expires_at: string;
-  }> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    // Usa Supabase Edge Function ao invés de Cloudflare Worker
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ctshqbxxlauulzsbapjb.supabase.co';
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
-    const response = await fetch(`${supabaseUrl}/functions/v1/generate-provisional-link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': supabaseAnonKey,
-      },
-      body: JSON.stringify({
-        instance_id: instanceId,
-        expires_hours: expiresHours || 24,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || error.message || 'Failed to generate provisional link');
-    }
-
-    return response.json();
-  },
 };
