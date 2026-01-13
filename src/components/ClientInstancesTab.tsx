@@ -721,11 +721,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               .eq('id', update.id);
           }
 
-          // Recarregar do banco após atualizar status
+          // Recarregar do banco após atualizar status (incluindo sub-usuários)
           const { data: updatedData } = await supabase
             .from('whatsapp_instances')
-            .select('*')
-            .eq('user_id', user?.id || '')
+            .select(`
+              *,
+              user:profiles!whatsapp_instances_user_id_fkey(id, email, parent_user_id)
+            `)
+            .in('user_id', userIds.length > 0 ? userIds : [user.id])
             .order('created_at', { ascending: false });
 
           if (updatedData) {
@@ -1093,11 +1096,12 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         await loadInstances();
 
         // Buscar a instância recém-criada e abrir modal de conexão automaticamente
+        // Usar selectedUserId (pode ser o próprio usuário ou um sub-usuário)
         const { data: newInstance } = await supabase
           .from('whatsapp_instances')
           .select('*')
           .eq('instance_token', response.token)
-          .eq('user_id', user?.id || '')
+          .eq('user_id', selectedUserId || user?.id || '')
           .single();
 
         if (newInstance && newInstance.status === 'disconnected') {
