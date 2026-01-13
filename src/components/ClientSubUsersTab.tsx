@@ -13,6 +13,10 @@ export default function ClientSubUsersTab() {
     email: '',
     password: '',
     maxInstances: 1,
+    configureChat: false, // Se deve configurar o chat
+    chatUrl: '',
+    chatApiKey: '',
+    chatAccountId: '',
   });
 
   useEffect(() => {
@@ -34,15 +38,47 @@ export default function ClientSubUsersTab() {
 
   async function handleCreateSubUser() {
     try {
+      // Validar configurações de chat se estiver configurando
+      if (formData.configureChat) {
+        if (!formData.chatUrl.trim() || !formData.chatApiKey.trim() || !formData.chatAccountId.trim()) {
+          alert('Por favor, preencha todas as configurações de chat ou desmarque a opção de configurar chat.');
+          return;
+        }
+        
+        const accountId = parseInt(formData.chatAccountId.trim(), 10);
+        if (isNaN(accountId)) {
+          alert('Account ID deve ser um número válido.');
+          return;
+        }
+      }
+
+      // Preparar configurações de chat se solicitado
+      const chatConfig = formData.configureChat && formData.chatUrl.trim() && formData.chatApiKey.trim() && formData.chatAccountId.trim()
+        ? {
+            chat_url: formData.chatUrl.trim(),
+            chat_api_key: formData.chatApiKey.trim(),
+            chat_account_id: parseInt(formData.chatAccountId.trim(), 10),
+          }
+        : null;
+
       await clientSubUsersApi.createSubUser(
         formData.email,
         formData.password,
-        formData.maxInstances
+        formData.maxInstances,
+        chatConfig
       );
 
       alert(`Sub-usuário criado!\nEmail: ${formData.email}\nSenha: ${formData.password}`);
       setShowModal(false);
-      setFormData({ email: '', password: '', maxInstances: 1 });
+      setFormData({ 
+        email: '', 
+        password: '', 
+        maxInstances: 1, 
+        configureChat: false,
+        chatUrl: '',
+        chatApiKey: '',
+        chatAccountId: '',
+      });
       loadSubUsers();
     } catch (error: any) {
       console.error('Error creating sub-user:', error);
@@ -67,7 +103,15 @@ export default function ClientSubUsersTab() {
       alert(message);
       setShowModal(false);
       setEditingSubUser(null);
-      setFormData({ email: '', password: '', maxInstances: 1 });
+      setFormData({ 
+        email: '', 
+        password: '', 
+        maxInstances: 1, 
+        configureChat: false,
+        chatUrl: '',
+        chatApiKey: '',
+        chatAccountId: '',
+      });
       loadSubUsers();
     } catch (error: any) {
       console.error('Error updating sub-user:', error);
@@ -89,14 +133,30 @@ export default function ClientSubUsersTab() {
 
   function openCreateModal() {
     setEditingSubUser(null);
-    setFormData({ email: '', password: '', maxInstances: 1 });
+    setFormData({ 
+      email: '', 
+      password: '', 
+      maxInstances: 1, 
+      configureChat: false,
+      chatUrl: '',
+      chatApiKey: '',
+      chatAccountId: '',
+    });
     setShowModal(true);
   }
 
   function openEditModal(subUser: SubUser) {
     setEditingSubUser(subUser);
-    setFormData({ email: subUser.email, password: '', maxInstances: subUser.max_instances || 1 });
-    setShowModal(true);
+      setFormData({ 
+        email: subUser.email, 
+        password: '', 
+        maxInstances: subUser.max_instances || 1, 
+        configureChat: false,
+        chatUrl: '',
+        chatApiKey: '',
+        chatAccountId: '',
+      });
+      setShowModal(true);
   }
 
   // Calcular instâncias disponíveis
@@ -294,6 +354,79 @@ export default function ClientSubUsersTab() {
                   </p>
                 )}
               </div>
+
+              {!editingSubUser && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                    <div>
+                      <p className="font-medium text-gray-900">Configurar Chat</p>
+                      <p className="text-sm text-gray-500">
+                        Configure as integrações do Chat para o sub-usuário
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.configureChat}
+                        onChange={(e) =>
+                          setFormData({ ...formData, configureChat: e.target.checked })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                    </label>
+                  </div>
+
+                  {formData.configureChat && (
+                    <div className="space-y-3 pl-4 border-l-2 border-blue-200 bg-blue-50/30 p-4 rounded-lg">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          URL do Chat
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.chatUrl}
+                          onChange={(e) =>
+                            setFormData({ ...formData, chatUrl: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="https://chat.exemplo.com"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          API Key do Chat
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.chatApiKey}
+                          onChange={(e) =>
+                            setFormData({ ...formData, chatApiKey: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Sua API Key do Chat"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Account ID do Chat
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.chatAccountId}
+                          onChange={(e) =>
+                            setFormData({ ...formData, chatAccountId: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="123"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">

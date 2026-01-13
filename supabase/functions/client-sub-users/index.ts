@@ -99,7 +99,7 @@ Deno.serve(async (req: Request) => {
 
     // Criar sub-usuário
     if (req.method === 'POST' && path === '/create') {
-      const { email, password, maxInstances } = await req.json();
+      const { email, password, maxInstances, chatConfig } = await req.json();
 
       if (!email || !password || !maxInstances) {
         return new Response(
@@ -179,16 +179,25 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Criar perfil com parent_user_id
+      // Criar perfil com parent_user_id e configurações de chat (se fornecidas)
+      const profileData: any = {
+        id: authData.user.id,
+        email,
+        role: 'client',
+        max_instances: maxInstances,
+        parent_user_id: user.id,
+      };
+
+      // Adicionar configurações de chat se fornecidas
+      if (chatConfig && chatConfig.chat_url && chatConfig.chat_api_key && chatConfig.chat_account_id) {
+        profileData.chat_url = chatConfig.chat_url;
+        profileData.chat_api_key = chatConfig.chat_api_key;
+        profileData.chat_account_id = chatConfig.chat_account_id;
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          id: authData.user.id,
-          email,
-          role: 'client',
-          max_instances: maxInstances,
-          parent_user_id: user.id,
-        });
+        .insert(profileData);
 
       if (profileError) {
         await supabase.auth.admin.deleteUser(authData.user.id);
