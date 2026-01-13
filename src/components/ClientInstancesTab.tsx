@@ -60,17 +60,28 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   });
   const [filterStatus, setFilterStatus] = useState<'all' | 'connected' | 'connecting' | 'disconnected'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'all' | 'mine' | 'sub-users'>('all');
+  const [subUsers, setSubUsers] = useState<Array<{id: string, email: string}>>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
 
   const summary = useMemo(() => {
-    const connected = instances.filter((instance) => instance.status === 'connected').length;
-    const connecting = instances.filter((instance) => instance.status === 'connecting').length;
-    const disconnected = instances.filter((instance) => instance.status === 'disconnected').length;
+    const allInstances = instances; // Já inclui próprias + sub-usuários
+    const myInstances = allInstances.filter(i => i.user_id === user?.id);
+    const subUserInstances = allInstances.filter(i => i.user_id !== user?.id);
+    
+    const connected = allInstances.filter((instance) => instance.status === 'connected').length;
+    const connecting = allInstances.filter((instance) => instance.status === 'connecting').length;
+    const disconnected = allInstances.filter((instance) => instance.status === 'disconnected').length;
+    
     const limit = profile?.max_instances ?? 0;
-    const usagePercent = limit > 0 ? Math.min(100, Math.round((instances.length / limit) * 100)) : null;
-    const available = limit > 0 ? Math.max(0, limit - instances.length) : null;
+    const totalUsed = allInstances.length; // Total de todas as instâncias
+    const usagePercent = limit > 0 ? Math.min(100, Math.round((totalUsed / limit) * 100)) : null;
+    const available = limit > 0 ? Math.max(0, limit - totalUsed) : null;
 
     return {
-      total: instances.length,
+      total: allInstances.length,
+      myInstances: myInstances.length,
+      subUserInstances: subUserInstances.length,
       connected,
       connecting,
       disconnected,
@@ -78,25 +89,35 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       available,
       usagePercent,
     };
-  }, [instances, profile]);
+  }, [instances, profile, user]);
 
   const filteredInstances = useMemo(() => {
+    let filtered = instances;
+    
+    // Filtrar por viewMode
+    if (viewMode === 'mine') {
+      filtered = filtered.filter(inst => inst.user_id === user?.id);
+    } else if (viewMode === 'sub-users') {
+      filtered = filtered.filter(inst => inst.user_id !== user?.id);
+    }
+    // 'all' mostra todas
+    
+    // Filtrar por status
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(inst => inst.status === filterStatus);
+    }
+    
+    // Filtrar por termo de busca
     const term = searchTerm.trim().toLowerCase();
-    return instances.filter((instance) => {
-      if (filterStatus !== 'all' && instance.status !== filterStatus) {
-        return false;
-      }
-
-      if (term) {
+    if (term) {
+      filtered = filtered.filter((instance) => {
         const haystack = `${instance.name ?? ''} ${instance.phone_number ?? ''}`.toLowerCase();
-        if (!haystack.includes(term)) {
-          return false;
-        }
-      }
+        return haystack.includes(term);
+      });
+    }
 
-      return true;
-    });
-  }, [instances, filterStatus, searchTerm]);
+    return filtered;
+  }, [instances, filterStatus, searchTerm, viewMode, user]);
 
   useEffect(() => {
     if (openCreate) {
@@ -149,9 +170,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
   useEffect(() => {
     if (user) {
-      loadInstances();
+      setSelectedUserId(user.id);
+      loadSubUsers().then(() => {
+        loadInstances();
+      });
     }
   }, [user]);
+
+  async function loadSubUsers() {
+    if (!user) return Promise.resolve();
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('parent_user_id', user.id);
+      
+      if (!error && data) {
+        setSubUsers(data);
+      }
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error loading sub-users:', error);
+      return Promise.resolve();
+    }
+  }
 
   // Verificação periódica do status de todas as instâncias conectadas
   // Helper function para determinar o status de conexão baseado na resposta da API
@@ -256,11 +299,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     // Verificar TODAS as instâncias (não apenas as marcadas como conectadas) para sincronizar status
     const checkInterval = setInterval(async () => {
       try {
-        // Buscar todas as instâncias com token (conectadas ou desconectadas no banco)
+        // Buscar todas as instâncias com token (próprias + sub-usuários)
+        const subUserIds = subUsers.map(u => u.id);
+        const userIds = [user.id, ...subUserIds];
+        
         const { data: allInstances, error } = await supabase
           .from('whatsapp_instances')
           .select('*')
-          .eq('user_id', user.id)
+          .in('user_id', userIds)
           .not('instance_token', 'is', null);
 
         if (error || !allInstances || allInstances.length === 0) {
@@ -543,11 +589,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   }
 
   async function loadInstances() {
+    if (!user) return;
+    
     try {
+      // Buscar sub-usuários primeiro se ainda não foram carregados
+      let currentSubUsers = subUsers;
+      if (currentSubUsers.length === 0) {
+        const { data: subUsersData } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .eq('parent_user_id', user.id);
+        currentSubUsers = subUsersData || [];
+        setSubUsers(currentSubUsers);
+      }
+      
+      // Buscar instâncias próprias E dos sub-usuários
+      const subUserIds = currentSubUsers.map(u => u.id);
+      const userIds = [user.id, ...subUserIds];
+      
       const { data, error } = await supabase
         .from('whatsapp_instances')
-        .select('*')
-        .eq('user_id', user?.id || '')
+        .select(`
+          *,
+          user:profiles!whatsapp_instances_user_id_fkey(id, email, parent_user_id)
+        `)
+        .in('user_id', userIds.length > 0 ? userIds : [user.id])
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -902,8 +968,12 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return;
     }
 
-    if (instances.length >= (profile?.max_instances || 0)) {
-      showToast(`Você atingiu o limite de ${profile?.max_instances} instâncias`, 'warning');
+    // Verificar limite considerando todas as instâncias (próprias + sub-usuários)
+    const totalInstances = instances.length;
+    const limit = profile?.max_instances ?? 0;
+    
+    if (limit > 0 && totalInstances >= limit) {
+      showToast(`Você atingiu o limite de ${limit} instâncias (incluindo sub-usuários)`, 'warning');
       return;
     }
 
@@ -930,10 +1000,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         }
 
         // Primeiro, salvar a instância no banco para obter o instance_id
+        // Usar selectedUserId (pode ser o próprio usuário ou um sub-usuário)
         const { data: newInstanceData, error } = await supabase
           .from('whatsapp_instances')
           .insert({
-            user_id: user?.id || '',
+            user_id: selectedUserId || user?.id || '',
             name: instanceName,
             instance_token: response.token,
             system_name: 'apilocal',
@@ -1608,6 +1679,40 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
+          {/* Filtros de visualização (Todas, Minhas, Sub-usuários) */}
+          {subUsers.length > 0 && (
+            <>
+              {[
+                { label: 'Todas', value: 'all' as const, count: summary.total },
+                { label: 'Minhas', value: 'mine' as const, count: summary.myInstances },
+                { label: 'Sub-usuários', value: 'sub-users' as const, count: summary.subUserInstances },
+              ].map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setViewMode(filter.value)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    viewMode === filter.value
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                  }`}
+                >
+                  {filter.label}
+                  {filter.count !== undefined && (
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${
+                      viewMode === filter.value
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {filter.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+              <div className="w-px h-6 bg-slate-200 mx-1" />
+            </>
+          )}
+          
+          {/* Filtros de status */}
           {[
             { label: 'Todas', value: 'all' },
             { label: 'Conectadas', value: 'connected' },
@@ -1675,9 +1780,21 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Instância
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Instância
+                    </div>
+                    {instance.user_id !== user?.id && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
+                        {(instance as any).user?.email || 'Sub-usuário'}
+                      </span>
+                    )}
+                    {instance.user_id === user?.id && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                        Minha
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900">{instance.name}</h3>
                   <div className="text-sm text-slate-500">
@@ -1694,7 +1811,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-slate-500">
-                        <Link className="h-4 w-4" />
                         Sem número vinculado
                       </span>
                     )}
@@ -1775,6 +1891,26 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             </div>
 
             <div className="p-6 space-y-4">
+              {subUsers.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Criar para
+                  </label>
+                  <select
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value={user?.id}>Minha conta ({profile?.email})</option>
+                    {subUsers.map(subUser => (
+                      <option key={subUser.id} value={subUser.id}>
+                        {subUser.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Nome da Instância

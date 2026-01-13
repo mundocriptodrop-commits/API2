@@ -7,6 +7,7 @@ import ClientActivityTab from '../components/ClientActivityTab';
 import ClientSubscriptionTab from '../components/ClientSubscriptionTab';
 import ClientApiTab from '../components/ClientApiTab';
 import ClientSettingsTab from '../components/ClientSettingsTab';
+import ClientSubUsersTab from '../components/ClientSubUsersTab';
 
 export default function ClientDashboard() {
   const [activeTab, setActiveTab] = useState('subscription');
@@ -38,6 +39,7 @@ export default function ClientDashboard() {
               onCloseCreate={handleCloseCreateInstance}
             />
           )}
+          {activeTab === 'sub-users' && <ClientSubUsersTab />}
           {activeTab === 'activity' && <ClientActivityTab />}
           {activeTab === 'subscription' && <ClientSubscriptionTab />}
           {activeTab === 'api' && <ClientApiTab />}

@@ -82,6 +82,7 @@ export interface Database {
           email: string
           role: 'admin' | 'client'
           max_instances: number | null
+          parent_user_id: string | null
           chat_url: string | null
           chat_api_key: string | null
           chat_account_id: number | null
@@ -93,6 +94,7 @@ export interface Database {
           email: string
           role?: 'admin' | 'client'
           max_instances?: number | null
+          parent_user_id?: string | null
           chat_url?: string | null
           chat_api_key?: string | null
           chat_account_id?: number | null
@@ -104,6 +106,7 @@ export interface Database {
           email?: string
           role?: 'admin' | 'client'
           max_instances?: number | null
+          parent_user_id?: string | null
           chat_url?: string | null
           chat_api_key?: string | null
           chat_account_id?: number | null

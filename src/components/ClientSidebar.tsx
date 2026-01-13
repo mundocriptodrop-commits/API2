@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, Settings, Activity, Code, Package } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, Settings, Activity, Code, Package, Users } from 'lucide-react';
 
 interface ClientSidebarProps {
   activeTab: string;
@@ -9,6 +9,7 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'instances', label: 'Minhas Instâncias', icon: MessageCircle },
+    { id: 'sub-users', label: 'Sub-usuários', icon: Users },
     { id: 'activity', label: 'Atividades', icon: Activity },
     { id: 'subscription', label: 'Planos', icon: Package },
     { id: 'api', label: 'Documentação API', icon: Code },
@@ -63,6 +64,7 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
                       <span className="text-[11px] uppercase tracking-[0.3em]">
                         {tab.id === 'dashboard' && 'Visão'}
                         {tab.id === 'instances' && 'Gestão'}
+                        {tab.id === 'sub-users' && 'Usuários'}
                         {tab.id === 'activity' && 'Monitor'}
                         {tab.id === 'subscription' && 'Assinaturas'}
                         {tab.id === 'api' && 'Docs'}
