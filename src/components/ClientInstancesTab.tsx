@@ -13,6 +13,9 @@ import {
   ShieldCheck,
   WifiOff,
   Search,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
 } from 'lucide-react';
 import type { Database } from '../lib/database.types';
 import ToastContainer, { type ToastMessage } from './ToastContainer';
@@ -64,6 +67,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   const [subUsers, setSubUsers] = useState<Array<{id: string, email: string}>>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [connectToUserId, setConnectToUserId] = useState<string>('');
+  const [chatConfigExpanded, setChatConfigExpanded] = useState(false);
+  const [chatConfig, setChatConfig] = useState<{
+    url: string;
+    apiKey: string;
+    accountId: string;
+    inboxId: string | null;
+  } | null>(null);
 
   const summary = useMemo(() => {
     const allInstances = instances; // Já inclui próprias + sub-usuários
@@ -1371,6 +1381,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           setQrCode('');
           setPairingCode('');
           setConnectToUserId('');
+          setChatConfigExpanded(false);
+          setChatConfig(null);
           setIsConnecting(false);
           loadInstances();
           showToast('Instância conectada com sucesso!', 'success');
@@ -1562,6 +1574,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       setPairingCode('');
       setPhoneNumber('');
       setConnectToUserId('');
+      setChatConfigExpanded(false);
+      setChatConfig(null);
       setShowDisconnectOption(false);
       setIsConnecting(false);
 
@@ -1607,10 +1621,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     );
   }
 
-  function openConnectModal(instance: WhatsAppInstance) {
+  async function openConnectModal(instance: WhatsAppInstance) {
     setSelectedInstance(instance);
     setPhoneNumber('');
     setConnectToUserId(instance.user_id); // Inicializar com o dono atual
+    setChatConfigExpanded(false);
     
     // Carregar QR code e pairing code do banco se existirem
     const savedQrCode = instance.qr_code || '';
@@ -1618,13 +1633,44 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     
     setQrCode(savedQrCode);
     setPairingCode(savedPairingCode);
+    
+    // Buscar configurações do chat se a instância tiver chat habilitado
+    if (instance.chat_enabled && instance.admin_field_01) {
+      try {
+        // Buscar configurações do perfil do usuário dono da instância
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('chat_url, chat_api_key, chat_account_id')
+          .eq('id', instance.user_id)
+          .single();
+        
+        if (profileData?.chat_url && profileData?.chat_api_key && profileData?.chat_account_id) {
+          setChatConfig({
+            url: profileData.chat_url,
+            apiKey: profileData.chat_api_key,
+            accountId: profileData.chat_account_id,
+            inboxId: instance.admin_field_01,
+          });
+        } else {
+          setChatConfig(null);
+        }
+      } catch (error) {
+        console.error('Error loading chat config:', error);
+        setChatConfig(null);
+      }
+    } else {
+      setChatConfig(null);
+    }
+    
     setShowConnectModal(true);
 
     console.log('[MODAL] Abrindo modal de conexão:', {
       instanceName: instance.name,
       status: instance.status,
       hasQrCode: !!savedQrCode,
-      hasPairingCode: !!savedPairingCode
+      hasPairingCode: !!savedPairingCode,
+      chatEnabled: instance.chat_enabled,
+      hasInboxId: !!instance.admin_field_01
     });
 
     if (instance.status === 'connecting') {
@@ -2057,6 +2103,62 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                       Formato: código do país + DDD + número (sem espaços ou caracteres especiais)
                     </p>
                   </div>
+
+                  {chatConfig && (
+                    <div className="border border-green-200 rounded-lg bg-green-50/50">
+                      <button
+                        type="button"
+                        onClick={() => setChatConfigExpanded(!chatConfigExpanded)}
+                        className="w-full flex items-center justify-between p-4 text-left hover:bg-green-50 transition-colors rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                          <div>
+                            <p className="text-sm font-semibold text-green-900">Chat Configurado</p>
+                            <p className="text-xs text-green-700">Integração ativa e pronta para uso</p>
+                          </div>
+                        </div>
+                        {chatConfigExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-green-600" />
+                        )}
+                      </button>
+                      
+                      {chatConfigExpanded && (
+                        <div className="px-4 pb-4 space-y-3 border-t border-green-200 pt-4">
+                          <div>
+                            <label className="text-xs font-medium text-green-800 mb-1 block">URL do Chat</label>
+                            <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 break-all">
+                              {chatConfig.url}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-green-800 mb-1 block">API Key</label>
+                            <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 font-mono">
+                              {chatConfig.apiKey.length > 20 
+                                ? `${chatConfig.apiKey.substring(0, 10)}...${chatConfig.apiKey.substring(chatConfig.apiKey.length - 10)}`
+                                : chatConfig.apiKey}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-green-800 mb-1 block">Account ID</label>
+                            <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200">
+                              {chatConfig.accountId}
+                            </p>
+                          </div>
+                          {chatConfig.inboxId && (
+                            <div>
+                              <label className="text-xs font-medium text-green-800 mb-1 block">Inbox ID</label>
+                              <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200">
+                                {chatConfig.inboxId}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -2113,6 +2215,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   setPairingCode('');
                   setPhoneNumber('');
                   setConnectToUserId('');
+                  setChatConfigExpanded(false);
+                  setChatConfig(null);
                   setShowDisconnectOption(false);
                   setIsConnecting(false);
                 }}
