@@ -289,15 +289,27 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return null;
     }
 
+    // LOG DETALHADO: Ver o que a API está retornando
+    console.log(`[STATUS_CHECK:${instanceName}] 🔍 Resposta completa da API:`, {
+      instanceStatus: instanceData?.status,
+      instanceData: instanceData,
+      statusData: statusData,
+      fullResponse: statusResponse
+    });
+
     // PRIORIDADE 1: Usar o campo status diretamente da API se disponível
     // A API retorna: "disconnected", "connecting", "connected"
     const apiStatus = instanceData?.status;
     if (apiStatus && typeof apiStatus === 'string') {
       const normalizedStatus = apiStatus.toLowerCase();
       if (normalizedStatus === 'connected' || normalizedStatus === 'connecting' || normalizedStatus === 'disconnected') {
-        console.log(`[STATUS_CHECK:${instanceName}] 📡 Status da API: ${normalizedStatus}`);
+        console.log(`[STATUS_CHECK:${instanceName}] 📡 Status DIRETO da API: ${normalizedStatus}`);
         return normalizedStatus as 'connected' | 'connecting' | 'disconnected';
+      } else {
+        console.log(`[STATUS_CHECK:${instanceName}] ⚠️ Status da API não reconhecido: "${apiStatus}"`);
       }
+    } else {
+      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ Campo instance.status não encontrado ou inválido na resposta`);
     }
 
     // PRIORIDADE 2: Verificar QR code ou pairing code - se houver, está "connecting"
@@ -315,13 +327,16 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return 'connecting';
     }
 
-    // PRIORIDADE 3: Verificar indicadores de conexão
+    // PRIORIDADE 3: Verificar indicadores de conexão (APENAS se não tiver status direto)
+    // IMPORTANTE: Só usar indicadores se NÃO tiver o campo status direto da API
     const hasLoggedInTrue = statusData?.loggedIn === true;
     const hasConnectedTrue = statusData?.connected === true;
     const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
     
-    if (hasLoggedInTrue || hasConnectedTrue || hasJid) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Indicadores positivos`);
+    // CRÍTICO: Só marcar como "connected" se TODOS os indicadores estiverem presentes
+    // Não assumir "connected" apenas com um indicador parcial
+    if (hasLoggedInTrue && hasConnectedTrue && hasJid) {
+      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Todos indicadores positivos (loggedIn + connected + JID)`);
       return 'connected';
     }
 
@@ -330,12 +345,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     const hasConnectedFalse = statusData?.connected === false;
     
     if (hasLoggedInFalse && hasConnectedFalse) {
-      console.log(`[STATUS_CHECK:${instanceName}] ❌ DESCONECTADO - Indicadores negativos`);
+      console.log(`[STATUS_CHECK:${instanceName}] ❌ DESCONECTADO - Indicadores negativos (loggedIn=false + connected=false)`);
       return 'disconnected';
     }
 
     // Se não conseguir determinar, retornar null para manter status atual
-    console.log(`[STATUS_CHECK:${instanceName}] ⚠️ INDETERMINADO - Mantendo status atual`);
+    // NÃO assumir "connected" por padrão
+    console.log(`[STATUS_CHECK:${instanceName}] ⚠️ INDETERMINADO - Mantendo status atual (não assumir connected)`);
     return null;
   }
 
@@ -412,9 +428,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             const phoneNumber = extractPhoneNumber(status);
             
             console.log(`[SYNC:${instance.name}] Status da API: ${apiStatus}, Status atual no banco: ${instance.status}`);
+            console.log(`[SYNC:${instance.name}] Resposta completa da API:`, JSON.stringify(status, null, 2));
 
             // PRIORIDADE: Usar o status diretamente da API se disponível
-            if (apiStatus) {
+            // IMPORTANTE: Só atualizar se apiStatus não for null (se for null, manter status atual)
+            if (apiStatus && apiStatus !== null) {
               // Se o status da API é diferente do status no banco, atualizar
               if (apiStatus !== instance.status) {
                 console.log(`[SYNC] Instância ${instance.name}: API diz "${apiStatus}", banco tem "${instance.status}" - ATUALIZANDO`);
@@ -518,98 +536,26 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               continue; // Status já foi atualizado usando a API
             }
 
-            // Fallback: Se não conseguiu determinar status da API, usar lógica antiga
-            const connectionStatus = getConnectionStatus(status, instance.name);
-            const isConnectedInApi = connectionStatus === true;
-
-            // Se está conectado na API mas desconectado no banco, atualizar para conectado
-            if (isConnectedInApi && instance.status !== 'connected') {
-              await supabase
-                .from('whatsapp_instances')
-                .update({
-                  status: 'connected',
-                  phone_number: phoneNumber || instance.phone_number || null,
-                  qr_code: null,
-                  pairing_code: null,
-                  last_disconnect_reason: null,
-                  last_disconnect_at: null,
-                })
-                .eq('id', instance.id);
-
-              console.log(`[SYNC] Instância ${instance.name} está conectada na API - sincronizando banco`);
+            // Fallback: Se não conseguiu determinar status da API (apiStatus === null)
+            // NÃO fazer nada - manter status atual do banco
+            // Isso evita marcar como "connected" incorretamente
+            console.log(`[SYNC:${instance.name}] ⚠️ Status da API é null/indeterminado - MANTENDO status atual do banco: ${instance.status}`);
+            console.log(`[SYNC:${instance.name}] ⚠️ NÃO atualizando status - aguardando resposta clara da API`);
+            
+            // Se o status atual no banco é "connected" mas a API não confirma, 
+            // verificar se realmente está desconectado antes de mudar
+            if (instance.status === 'connected') {
+              // Verificar se a API diz explicitamente que está desconectado
+              const statusData = (status as any).status;
+              const instanceData = (status as any).instance;
               
-              // Recarregar lista apenas se mudou de desconectado para conectado
-              if (instance.status === 'disconnected') {
-                loadInstances();
-                showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
-                
-                // Configurar Chatwoot se necessário (após recarregar para ter dados atualizados)
-                const { data: updatedInstance } = await supabase
-                  .from('whatsapp_instances')
-                  .select('*')
-                  .eq('id', instance.id)
-                  .single();
-                
-                if (updatedInstance) {
-                  await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
-                }
-              }
-              continue;
-            }
-
-            // Se connectionStatus é null (indeterminado), manter status atual
-            // Não fazer nada para evitar mudanças indevidas
-            if (connectionStatus === null) {
-              continue;
-            }
-
-            // Se connectionStatus é null (indeterminado), manter status atual
-            if (connectionStatus === null) {
-              continue;
-            }
-
-            // Se está conectado na API, atualizar para connected
-            if (isConnectedInApi && instance.status !== 'connected') {
-              await supabase
-                .from('whatsapp_instances')
-                .update({
-                  status: 'connected',
-                  phone_number: phoneNumber || instance.phone_number || null,
-                  qr_code: null,
-                  pairing_code: null,
-                  last_disconnect_reason: null,
-                  last_disconnect_at: null,
-                })
-                .eq('id', instance.id);
-
-              console.log(`[SYNC] Instância ${instance.name} está conectada na API - sincronizando banco`);
+              // Só marcar como desconectado se TODOS os indicadores negativos estiverem presentes
+              const hasLoggedInFalse = statusData?.loggedIn === false;
+              const hasConnectedFalse = statusData?.connected === false;
+              const hasNoJid = !statusData?.jid || !statusData.jid.includes('@');
               
-              // Recarregar lista apenas se mudou de desconectado para conectado
-              if (instance.status === 'disconnected') {
-                loadInstances();
-                showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
-              }
-            }
-            // Se está desconectado na API e não está como disconnected no banco, atualizar
-            else if (connectionStatus === false && instance.status !== 'disconnected') {
-              // Só atualizar se não estiver como "connecting" (pode estar aguardando QR code)
-              if (instance.status === 'connecting') {
-                // Se está como connecting mas API diz desconectado, verificar se tem QR code no banco
-                if (!instance.qr_code && !instance.pairing_code) {
-                  // Não tem QR code e API diz desconectado, então realmente está desconectado
-                  await supabase
-                    .from('whatsapp_instances')
-                    .update({
-                      status: 'disconnected',
-                      qr_code: null,
-                      pairing_code: null,
-                    })
-                    .eq('id', instance.id);
-                  console.log(`[SYNC] Instância ${instance.name} está desconectada na API - atualizando banco`);
-                }
-                // Se tem QR code no banco, manter como connecting (pode estar aguardando leitura)
-              } else {
-                // Se está como connected mas API diz desconectado, atualizar
+              if (hasLoggedInFalse && hasConnectedFalse && hasNoJid) {
+                console.log(`[SYNC:${instance.name}] ⚠️ API confirma desconexão (loggedIn=false, connected=false, sem JID) - atualizando para disconnected`);
                 await supabase
                   .from('whatsapp_instances')
                   .update({
@@ -618,74 +564,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     pairing_code: null,
                   })
                   .eq('id', instance.id);
-                console.log(`[SYNC] Instância ${instance.name} está desconectada na API - atualizando banco`);
+                loadInstances();
+              } else {
+                console.log(`[SYNC:${instance.name}] ✅ Mantendo como connected (API não confirma desconexão explícita)`);
               }
             }
-            // PROTEÇÃO CRÍTICA: Só marcar como desconectado se:
-            // 1. API diz explicitamente que está desconectado (connectionStatus === false, não null)
-            // 2. E instância está conectada no banco
-            // 3. E verificação dupla confirma desconexão
-            // IMPORTANTE: Se connectionStatus for null (indeterminado), já foi tratado acima e mantém como conectado
-            else if (connectionStatus === false && instance.status === 'connected') {
-              // Verificação adicional: garantir que realmente está desconectado
-              // Se há QR code ou pairing code, pode estar em processo de conexão, não marcar como desconectado
-              const hasQrCode = statusData?.qrcode || (status as any).instance?.qrcode || (status as any).qrCode;
-              const hasPairingCode = statusData?.paircode || (status as any).instance?.paircode || (status as any).pairingCode;
-              
-              if (hasQrCode || hasPairingCode) {
-                console.log(`[SYNC] Instância ${instance.name}: Tem QR/Pairing code, mantendo como conectada`);
-                continue;
-              }
-
-              // VERIFICAÇÃO DUPLA: Antes de marcar como desconectado, verificar novamente na API
-              console.log(`[SYNC] ⚠️ API diz desconectado para ${instance.name} mas está conectada no banco - verificando novamente...`);
-              try {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                const secondStatus = await whatsappApi.getInstanceStatus(instance.instance_token!);
-                const secondConnectionStatus = getConnectionStatus(secondStatus, instance.name);
-                
-                // Só marcar como desconectado se a segunda verificação também confirmar
-                if (secondConnectionStatus === false) {
-                  await supabase
-                    .from('whatsapp_instances')
-                    .update({
-                      status: 'disconnected',
-                      last_disconnect_reason: statusData?.disconnectReason || 'Desconexão confirmada na API (verificação dupla)',
-                      last_disconnect_at: new Date().toISOString(),
-                      qr_code: null,
-                      pairing_code: null,
-                    })
-                    .eq('id', instance.id);
-
-                  console.log(`[SYNC] ⚠️ Instância ${instance.name} desconectou na API (confirmado em verificação dupla) - sincronizando banco`);
-                  loadInstances();
-                  showToast(`Instância "${instance.name}" desconectou.`, 'warning');
-                } else {
-                  // Segunda verificação não confirma desconexão - manter como conectado
-                  console.log(`[SYNC] ✅ Segunda verificação para ${instance.name} não confirma desconexão - mantendo como conectada`);
-                  if (secondConnectionStatus === true) {
-                    // Se na segunda verificação está conectado, atualizar dados
-                    const secondPhoneNumber = extractPhoneNumber(secondStatus);
-                    await supabase
-                      .from('whatsapp_instances')
-                      .update({
-                        phone_number: secondPhoneNumber || instance.phone_number || null,
-                      })
-                      .eq('id', instance.id);
-                  }
-                }
-              } catch (secondError) {
-                // Se segunda verificação falhar, manter como conectado
-                console.warn(`[SYNC] Segunda verificação falhou para ${instance.name} - mantendo como conectado:`, secondError);
-              }
-            }
-            // Se ambos estão conectados, atualizar dados (número, etc) se necessário
-            else if (isConnectedInApi && instance.status === 'connected') {
-              const updates: any = {};
-              
-              if (phoneNumber && phoneNumber !== instance.phone_number) {
-                updates.phone_number = phoneNumber;
-              }
+            
+            // Se não está conectado no banco e não conseguimos determinar na API, não fazer nada
+            continue;
 
               if (Object.keys(updates).length > 0) {
                 await supabase
