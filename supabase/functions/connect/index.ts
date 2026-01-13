@@ -572,6 +572,7 @@ serve(async (req) => {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Conectar WhatsApp</title>
   <style>
@@ -668,29 +669,46 @@ serve(async (req) => {
     // Auto-refresh a cada 3 segundos para verificar se conectou
     const checkInterval = setInterval(async () => {
       try {
-        const response = await fetch(\`\${supabaseUrl}/functions/v1/connect/\${linkToken}\`, {
+        const response = await fetch(\`\${supabaseUrl}/functions/v1/connect/\${linkToken}?apikey=\${supabaseAnonKey}\`, {
           method: 'GET',
           headers: {
             'apikey': supabaseAnonKey,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/html',
           },
         });
-        const data = await response.json();
         
-        if (data.connected) {
-          clearInterval(checkInterval);
-          document.querySelector('.container').innerHTML = \`
-            <h1>✅ Conectado!</h1>
-            <div class="status success">
-              <h2>WhatsApp Conectado com Sucesso!</h2>
-              <p>Instância: \${data.instance_name || 'N/A'}</p>
-              <p>Você pode fechar esta página.</p>
-            </div>
-          \`;
-        } else if (data.qr_code && !document.querySelector('.qr-code')) {
-          // Atualiza QR code se aparecer
-          location.reload();
+        const contentType = response.headers.get('content-type') || '';
+        
+        // Se a resposta é HTML (instância conectada), substitui a página
+        if (contentType.includes('text/html')) {
+          const html = await response.text();
+          if (html.includes('Conectado') || html.includes('WhatsApp Conectado') || html.includes('✅')) {
+            clearInterval(checkInterval);
+            document.open();
+            document.write(html);
+            document.close();
+            return;
+          }
+        }
+        
+        // Se a resposta é JSON, processa normalmente
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          
+          if (data.connected) {
+            clearInterval(checkInterval);
+            document.querySelector('.container').innerHTML = \`
+              <h1>✅ Conectado!</h1>
+              <div class="status success">
+                <h2>WhatsApp Conectado com Sucesso!</h2>
+                <p>Instância: \${data.instance_name || 'N/A'}</p>
+                <p>Você pode fechar esta página.</p>
+              </div>
+            \`;
+          } else if (data.qr_code && !document.querySelector('.qr-code')) {
+            // Atualiza QR code se aparecer
+            location.reload();
+          }
         }
       } catch (e) {
         console.error('Error checking status:', e);
