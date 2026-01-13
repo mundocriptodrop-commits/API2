@@ -43,6 +43,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   
   // Lock para evitar configuração duplicada do Chatwoot
   const chatwootConfiguring = useRef<Set<string>>(new Set());
+  // Track instâncias sendo excluídas para evitar mostrar erros de polling
+  const deletingInstances = useRef<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -1558,35 +1560,44 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         }
         // Se apiStatus === null ou 'connecting', manter status atual (não atualizar)
       } catch (error: any) {
+        // Verificar se a instância está sendo excluída (não mostrar erro se estiver)
+        const isBeingDeleted = deletingInstances.current.has(instance.id);
+
         // Tratar erros específicos da API
         if (error?.status === 401) {
           console.warn(`[POLLING:${instance.name}] ⚠️ Token inválido ou expirado (401) - parando polling`);
           clearInterval(interval);
           if (timeoutId) clearTimeout(timeoutId);
-          // Marcar como desconectado se o token é inválido
-          if (instance.status === 'connected' || instance.status === 'connecting') {
-            await supabase
-              .from('whatsapp_instances')
-              .update({
-                status: 'disconnected',
-                qr_code: null,
-                pairing_code: null,
-              })
-              .eq('id', instance.id);
+
+          if (!isBeingDeleted) {
+            // Marcar como desconectado se o token é inválido
+            if (instance.status === 'connected' || instance.status === 'connecting') {
+              await supabase
+                .from('whatsapp_instances')
+                .update({
+                  status: 'disconnected',
+                  qr_code: null,
+                  pairing_code: null,
+                })
+                .eq('id', instance.id);
+            }
+            setShowConnectModal(false);
+            setIsConnecting(false);
+            showToast('Token da instância inválido ou expirado. Por favor, reconecte a instância.', 'error');
+            loadInstances();
           }
-          setShowConnectModal(false);
-          setIsConnecting(false);
-          showToast('Token da instância inválido ou expirado. Por favor, reconecte a instância.', 'error');
-          loadInstances();
           return;
         } else if (error?.status === 404) {
           console.warn(`[POLLING:${instance.name}] ⚠️ Instância não encontrada na API (404) - parando polling`);
           clearInterval(interval);
           if (timeoutId) clearTimeout(timeoutId);
-          setShowConnectModal(false);
-          setIsConnecting(false);
-          showToast('Instância não encontrada na API.', 'error');
-          loadInstances();
+
+          if (!isBeingDeleted) {
+            setShowConnectModal(false);
+            setIsConnecting(false);
+            showToast('Instância não encontrada na API.', 'error');
+            loadInstances();
+          }
           return;
         } else if (error?.status === 500) {
           console.error(`[POLLING:${instance.name}] ❌ Erro interno do servidor (500) - continuando polling`);
@@ -1776,6 +1787,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       async () => {
         hideConfirm();
         try {
+          // Marcar instância como sendo excluída para evitar erros de polling
+          deletingInstances.current.add(instance.id);
+
           if (instance.instance_token && instance.status !== 'disconnected') {
             await whatsappApi.disconnectInstance(instance.instance_token);
           }
@@ -1793,8 +1807,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
           loadInstances();
           showToast('Instância excluída com sucesso!', 'success');
+
+          // Remover do Set após um pequeno delay para garantir que polling parou
+          setTimeout(() => {
+            deletingInstances.current.delete(instance.id);
+          }, 5000);
         } catch (error) {
           console.error('Error deleting instance:', error);
+          deletingInstances.current.delete(instance.id);
           showToast('Erro ao excluir instância', 'error');
         }
       },
