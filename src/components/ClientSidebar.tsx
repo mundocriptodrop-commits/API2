@@ -1,4 +1,5 @@
 import { MessageCircle, LayoutDashboard, Settings, Activity, Code, Package, Users } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ClientSidebarProps {
   activeTab: string;
@@ -6,15 +7,27 @@ interface ClientSidebarProps {
 }
 
 export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarProps) {
-  const tabs = [
+  const { isSubUser } = useAuth();
+  
+  const allTabs: Array<{
+    id: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    restricted?: boolean;
+  }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'instances', label: 'Minhas Instâncias', icon: MessageCircle },
-    { id: 'sub-users', label: 'Sub-usuários', icon: Users },
-    { id: 'activity', label: 'Atividades', icon: Activity },
-    { id: 'subscription', label: 'Planos', icon: Package },
+    { id: 'sub-users', label: 'Sub-usuários', icon: Users, restricted: true },
+    { id: 'activity', label: 'Atividades', icon: Activity, restricted: true },
+    { id: 'subscription', label: 'Planos', icon: Package, restricted: true },
     { id: 'api', label: 'Documentação API', icon: Code },
     { id: 'settings', label: 'Configurações', icon: Settings },
   ];
+  
+  // Filtrar abas restritas para sub-usuários
+  const tabs = isSubUser 
+    ? allTabs.filter(tab => !tab.restricted)
+    : allTabs;
 
   return (
     <aside className="w-64 bg-white/80 backdrop-blur border-r border-slate-200 min-h-screen flex flex-col">

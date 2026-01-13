@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ClientSidebar from '../components/ClientSidebar';
 import ClientTopBar from '../components/ClientTopBar';
 import ClientDashboardTab from '../components/ClientDashboardTab';
@@ -8,10 +8,22 @@ import ClientSubscriptionTab from '../components/ClientSubscriptionTab';
 import ClientApiTab from '../components/ClientApiTab';
 import ClientSettingsTab from '../components/ClientSettingsTab';
 import ClientSubUsersTab from '../components/ClientSubUsersTab';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ClientDashboard() {
-  const [activeTab, setActiveTab] = useState('subscription');
+  const { isSubUser } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [pendingCreateInstance, setPendingCreateInstance] = useState(false);
+  
+  // Redirecionar sub-usuários se tentarem acessar abas restritas
+  useEffect(() => {
+    if (isSubUser) {
+      const restrictedTabs = ['sub-users', 'activity', 'subscription'];
+      if (restrictedTabs.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
+    }
+  }, [isSubUser, activeTab]);
 
   const handleRequestCreateInstance = () => {
     setPendingCreateInstance(true);
@@ -39,9 +51,9 @@ export default function ClientDashboard() {
               onCloseCreate={handleCloseCreateInstance}
             />
           )}
-          {activeTab === 'sub-users' && <ClientSubUsersTab />}
-          {activeTab === 'activity' && <ClientActivityTab />}
-          {activeTab === 'subscription' && <ClientSubscriptionTab />}
+          {!isSubUser && activeTab === 'sub-users' && <ClientSubUsersTab />}
+          {!isSubUser && activeTab === 'activity' && <ClientActivityTab />}
+          {!isSubUser && activeTab === 'subscription' && <ClientSubscriptionTab />}
           {activeTab === 'api' && <ClientApiTab />}
           {activeTab === 'settings' && <ClientSettingsTab />}
         </main>
