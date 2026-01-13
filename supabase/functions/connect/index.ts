@@ -688,12 +688,42 @@ serve(async (req) => {
       margin: 15px 0;
       font-family: 'Courier New', monospace;
     }
+    .pairing-container {
+      margin-top: 20px;
+    }
+    .pairing-label {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    .pairing-instructions {
+      font-size: 13px;
+      color: #888;
+      margin-top: 10px;
+    }
     .status {
       margin-top: 20px;
       padding: 15px;
       border-radius: 10px;
       background: #e3f2fd;
       color: #1976d2;
+    }
+    .status-margin {
+      margin-top: 30px;
+    }
+    .status-text {
+      margin: 0;
+    }
+    .status-subtext {
+      margin: 5px 0 0 0;
+      font-size: 12px;
+    }
+    .connect-button-link {
+      text-decoration: none;
+      display: inline-block;
+    }
+    .loading-container {
+      margin-top: 20px;
     }
     .loading {
       display: inline-block;
@@ -725,28 +755,32 @@ serve(async (req) => {
         </div>
       ` : ''}
       ${pairingCode ? `
-        <div style="margin-top: 20px;">
-          <p style="font-size: 14px; color: #666; margin-bottom: 10px;">Ou use o código de pareamento:</p>
+        <div class="pairing-container">
+          <p class="pairing-label">Ou use o código de pareamento:</p>
           <div class="pairing-code">${pairingCode}</div>
-          <p style="font-size: 13px; color: #888; margin-top: 10px;">Configurações → Aparelhos conectados → Conectar um aparelho</p>
+          <p class="pairing-instructions">Configurações → Aparelhos conectados → Conectar um aparelho</p>
         </div>
       ` : ''}
-      <div class="status" style="margin-top: 30px;">
-        <p style="margin: 0;">⏳ Aguardando conexão...</p>
-        <p style="margin: 5px 0 0 0; font-size: 12px;">Este link expirará automaticamente após a conexão</p>
+      <div class="status status-margin">
+        <p class="status-text">⏳ Aguardando conexão...</p>
+        <p class="status-subtext">Este link expirará automaticamente após a conexão</p>
       </div>
+      <meta http-equiv="refresh" content="3">
     ` : `
       <!-- Opção 2: Link compartilhado - mostra botão para conectar -->
       <p class="description">Clique no botão abaixo para gerar o QR Code e conectar seu WhatsApp</p>
-      <button class="connect-button" onclick="connectWhatsApp()">
-        🔗 Conectar WhatsApp
-      </button>
-      <div id="qrContent" style="display: none;">
+      <a href="${url.origin}${url.pathname}?apikey=${encodeURIComponent(expectedAnonKey)}&connect=true" class="connect-button-link">
+        <button class="connect-button">
+          🔗 Conectar WhatsApp
+        </button>
+      </a>
+      <div class="loading-container">
         <div class="loading"></div>
-        <div class="status" style="margin-top: 20px;">
-          <p style="margin: 0;">⏳ Preparando conexão...</p>
+        <div class="status status-margin">
+          <p class="status-text">⏳ Preparando conexão...</p>
         </div>
       </div>
+      <meta http-equiv="refresh" content="5">
     `}
     
     <div class="info">
@@ -754,45 +788,6 @@ serve(async (req) => {
     </div>
   </div>
   
-  <script>
-    const linkToken = '${linkToken}';
-    const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
-    
-    function connectWhatsApp() {
-      const button = document.querySelector('.connect-button');
-      const qrContent = document.getElementById('qrContent');
-      
-      button.style.display = 'none';
-      qrContent.style.display = 'block';
-      
-      // Recarrega a página para buscar QR code
-      setTimeout(() => {
-        location.reload();
-      }, 1000);
-    }
-    
-    // Verifica conexão a cada 3 segundos
-    setInterval(function() {
-      fetch(supabaseUrl + '/functions/v1/connect/' + linkToken + '?apikey=' + encodeURIComponent(supabaseAnonKey), {
-        headers: { 'apikey': supabaseAnonKey }
-      })
-      .then(r => r.text())
-      .then(html => {
-        if (html.includes('Conectado') || html.includes('✅') || html.includes('WhatsApp Conectado')) {
-          document.body.innerHTML = '<div class="container"><h1>✅ Conectado!</h1><div class="info" style="background:#e8f5e9;color:#2e7d32;"><p>WhatsApp Conectado com Sucesso!</p><p>Você pode fechar esta página.</p></div></div>';
-        }
-      })
-      .catch(e => console.error('Error:', e));
-    }, 3000);
-    
-    ${!qrCode && !pairingCode ? `
-    // Se não tem QR code, recarrega após 5 segundos para tentar buscar
-    setTimeout(function() {
-      location.reload();
-    }, 5000);
-    ` : ''}
-  </script>
 </body>
 </html>`;
 
@@ -801,8 +796,6 @@ serve(async (req) => {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
-        'X-Frame-Options': 'SAMEORIGIN',
       },
     });
   } catch (error) {
