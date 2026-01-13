@@ -24,8 +24,39 @@
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       text-align: center;
     }
-    h1 { color: #333; margin-bottom: 10px; font-size: 28px; }
-    p { color: #666; margin-bottom: 30px; line-height: 1.6; }
+    h1 { color: #333; margin-bottom: 20px; font-size: 28px; }
+    .instance-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .description {
+      color: #666;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+    .connect-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 20px;
+    }
+    .info {
+      margin-top: 30px;
+      padding: 15px;
+      background: #e3f2fd;
+      border-radius: 10px;
+      color: #1976d2;
+      font-size: 14px;
+    }
     .qr-container {
       background: #f8f9fa;
       border-radius: 15px;
@@ -33,14 +64,31 @@
       margin: 30px 0;
       display: inline-block;
     }
-    .qr-code { max-width: 100%; height: auto; }
+    .qr-code {
+      max-width: 100%;
+      height: auto;
+      margin: 20px 0;
+    }
     .pairing-code {
-      font-size: 32px;
+      font-size: 24px;
       font-weight: bold;
       color: #667eea;
-      letter-spacing: 8px;
-      margin: 20px 0;
+      letter-spacing: 4px;
+      margin: 15px 0;
       font-family: 'Courier New', monospace;
+    }
+    .pairing-container {
+      margin-top: 20px;
+    }
+    .pairing-label {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    .pairing-instructions {
+      font-size: 13px;
+      color: #888;
+      margin-top: 10px;
     }
     .status {
       margin-top: 20px;
@@ -49,13 +97,21 @@
       background: #e3f2fd;
       color: #1976d2;
     }
-    .error {
-      background: #ffebee;
-      color: #c62828;
+    .status-margin {
+      margin-top: 30px;
     }
-    .success {
-      background: #e8f5e9;
-      color: #2e7d32;
+    .status-text {
+      margin: 0;
+    }
+    .status-subtext {
+      margin: 5px 0 0 0;
+      font-size: 12px;
+    }
+    .reload-link {
+      color: #1976d2;
+      text-decoration: underline;
+      margin-top: 10px;
+      display: inline-block;
     }
     .loading {
       display: inline-block;
@@ -76,113 +132,118 @@
 <body>
   <div class="container">
     <h1>📱 Conectar WhatsApp</h1>
-    <p id="message">Carregando...</p>
-    <div id="content"></div>
+    <div id="content">
+      <div class="loading"></div>
+      <p class="description">Carregando...</p>
+    </div>
+    <div class="info">
+      <p>⏳ Este link expirará automaticamente após a conexão</p>
+    </div>
   </div>
 
   <script>
     // Extrai token da URL
-    const pathParts = window.location.pathname.split('/');
-    const linkToken = pathParts[pathParts.length - 1];
-
-    if (!linkToken) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    
+    if (!token) {
       document.getElementById('content').innerHTML = `
-        <div class="status error">
-          Link inválido. Verifique o link e tente novamente.
+        <div class="status" style="background: #ffebee; color: #c62828;">
+          <p>Token não encontrado na URL.</p>
         </div>
       `;
-      document.getElementById('message').textContent = 'Erro';
     } else {
-      loadQRCode();
+      loadQRCode(token);
     }
 
-    async function loadQRCode() {
+    async function loadQRCode(linkToken) {
       try {
-        // Busca dados do link via Supabase Edge Function
-        const supabaseUrl = window.location.origin.includes('supabase.co') 
-          ? window.location.origin 
-          : 'https://ctshqbxxlauulzsbapjb.supabase.co';
+        const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
         
-        const response = await fetch(`${supabaseUrl}/functions/v1/get-connection-link/${linkToken}`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`, {
           headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY',
+            'apikey': supabaseAnonKey,
+            'Accept': 'text/html',
           },
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-          throw new Error(data.error || 'Erro ao carregar link');
+          throw new Error('Erro ao carregar link');
         }
 
-        // Se já está conectado
-        if (data.connected) {
-          document.getElementById('message').textContent = '✅ Conectado!';
+        const html = await response.text();
+        
+        // Se a resposta contém "Conectado", mostra sucesso
+        if (html.includes('Conectado') || html.includes('✅')) {
           document.getElementById('content').innerHTML = `
-            <div class="status success">
-              <h2>WhatsApp Conectado com Sucesso!</h2>
-              <p>Instância: ${data.instance_name || 'N/A'}</p>
-              <p>Você pode fechar esta página.</p>
+            <h1>✅ Conectado!</h1>
+            <div class="status" style="background: #e8f5e9; color: #2e7d32;">
+              <p>WhatsApp Conectado com Sucesso!</p>
+              <p style="margin-top: 10px;">Você pode fechar esta página.</p>
             </div>
           `;
           return;
         }
 
-        // Exibe QR code ou pairing code
-        if (data.qr_code) {
-          document.getElementById('message').textContent = 'Escaneie o QR code abaixo com seu WhatsApp';
-          document.getElementById('content').innerHTML = `
-            <div class="qr-container">
-              <img src="${data.qr_code}" alt="QR Code" class="qr-code" />
-            </div>
-            ${data.pairing_code ? `
-              <div class="pairing-code">${data.pairing_code}</div>
-              <p style="font-size: 14px; color: #666;">Ou digite este código no WhatsApp</p>
-            ` : ''}
-            <div class="status">
-              Aguardando conexão... Este link expirará automaticamente após a conexão.
-            </div>
-          `;
-        } else if (data.pairing_code) {
-          document.getElementById('message').textContent = 'Use o código de pareamento abaixo';
-          document.getElementById('content').innerHTML = `
-            <div class="pairing-code">${data.pairing_code}</div>
-            <p>Digite este código no WhatsApp: Configurações → Aparelhos conectados → Conectar um aparelho</p>
-            <div class="status">
-              Aguardando conexão... Este link expirará automaticamente após a conexão.
-            </div>
-          `;
+        // Extrai informações do HTML retornado
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const container = doc.querySelector('.container');
+        
+        if (container) {
+          document.getElementById('content').innerHTML = container.innerHTML;
         } else {
-          document.getElementById('message').textContent = 'Preparando conexão...';
-          document.getElementById('content').innerHTML = `
-            <div class="loading"></div>
-            <div class="status">
-              Aguarde alguns segundos e recarregue a página.
+          // Fallback: tenta extrair QR code diretamente
+          const qrMatch = html.match(/<img[^>]+src="([^"]+)"[^>]*alt="QR Code"/);
+          const pairingMatch = html.match(/<div class="pairing-code">([^<]+)<\/div>/);
+          const instanceMatch = html.match(/<div class="instance-name">([^<]+)<\/div>/);
+          
+          let content = '';
+          if (instanceMatch) {
+            content += `<div class="instance-name">${instanceMatch[1]}</div>`;
+          }
+          if (qrMatch) {
+            content += `
+              <p class="description">Escaneie o QR Code abaixo com seu WhatsApp para conectar</p>
+              <div class="qr-container">
+                <img src="${qrMatch[1]}" alt="QR Code" class="qr-code" />
+              </div>
+            `;
+          }
+          if (pairingMatch) {
+            content += `
+              <div class="pairing-container">
+                <p class="pairing-label">Ou use o código de pareamento:</p>
+                <div class="pairing-code">${pairingMatch[1]}</div>
+                <p class="pairing-instructions">Configurações → Aparelhos conectados → Conectar um aparelho</p>
+              </div>
+            `;
+          }
+          content += `
+            <div class="status status-margin">
+              <p class="status-text">⏳ Aguardando conexão...</p>
+              <p class="status-subtext">Recarregue esta página para verificar se já conectou</p>
+              <a href="?token=${linkToken}" class="reload-link">🔄 Recarregar Página</a>
             </div>
           `;
-          // Tenta novamente em 5 segundos
-          setTimeout(loadQRCode, 5000);
-          return;
+          
+          document.getElementById('content').innerHTML = content;
         }
 
-        // Auto-refresh a cada 3 segundos para verificar se conectou
-        const checkInterval = setInterval(async () => {
+        // Verifica conexão a cada 3 segundos
+        setInterval(async () => {
           try {
-            const checkResponse = await fetch(`${supabaseUrl}/functions/v1/get-connection-link/${linkToken}`, {
-              headers: {
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY',
-              },
+            const checkResponse = await fetch(`${supabaseUrl}/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`, {
+              headers: { 'apikey': supabaseAnonKey, 'Accept': 'text/html' },
             });
-            const checkData = await checkResponse.json();
-            
-            if (checkData.connected) {
-              clearInterval(checkInterval);
-              document.getElementById('message').textContent = '✅ Conectado!';
+            const checkHtml = await checkResponse.text();
+            if (checkHtml.includes('Conectado') || checkHtml.includes('✅')) {
               document.getElementById('content').innerHTML = `
-                <div class="status success">
-                  <h2>WhatsApp Conectado com Sucesso!</h2>
-                  <p>Instância: ${checkData.instance_name || 'N/A'}</p>
-                  <p>Você pode fechar esta página.</p>
+                <h1>✅ Conectado!</h1>
+                <div class="status" style="background: #e8f5e9; color: #2e7d32;">
+                  <p>WhatsApp Conectado com Sucesso!</p>
+                  <p style="margin-top: 10px;">Você pode fechar esta página.</p>
                 </div>
               `;
             }
@@ -192,10 +253,11 @@
         }, 3000);
 
       } catch (error) {
-        document.getElementById('message').textContent = 'Erro';
+        console.error('Error:', error);
         document.getElementById('content').innerHTML = `
-          <div class="status error">
-            ${error.message || 'Erro ao carregar link. Verifique se o link está correto e não expirou.'}
+          <div class="status" style="background: #ffebee; color: #c62828;">
+            <p>Erro ao carregar QR Code. Tente novamente.</p>
+            <a href="?token=${linkToken}" class="reload-link" style="margin-top: 10px;">🔄 Recarregar</a>
           </div>
         `;
       }

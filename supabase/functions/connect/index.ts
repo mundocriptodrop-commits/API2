@@ -763,9 +763,13 @@ serve(async (req) => {
       ` : ''}
       <div class="status status-margin">
         <p class="status-text">⏳ Aguardando conexão...</p>
-        <p class="status-subtext">Este link expirará automaticamente após a conexão</p>
+        <p class="status-subtext">Recarregue esta página para verificar se já conectou</p>
+        <p class="status-subtext" style="margin-top: 10px;">
+          <a href="${url.origin}${url.pathname}?apikey=${encodeURIComponent(expectedAnonKey)}" style="color: #1976d2; text-decoration: underline;">
+            🔄 Recarregar Página
+          </a>
+        </p>
       </div>
-      <meta http-equiv="refresh" content="3">
     ` : `
       <!-- Opção 2: Link compartilhado - mostra botão para conectar -->
       <p class="description">Clique no botão abaixo para gerar o QR Code e conectar seu WhatsApp</p>
@@ -778,9 +782,13 @@ serve(async (req) => {
         <div class="loading"></div>
         <div class="status status-margin">
           <p class="status-text">⏳ Preparando conexão...</p>
+          <p class="status-subtext" style="margin-top: 10px;">
+            <a href="${url.origin}${url.pathname}?apikey=${encodeURIComponent(expectedAnonKey)}" style="color: #1976d2; text-decoration: underline;">
+              🔄 Recarregar Página
+            </a>
+          </p>
         </div>
       </div>
-      <meta http-equiv="refresh" content="5">
     `}
     
     <div class="info">
