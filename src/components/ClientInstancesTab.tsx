@@ -467,12 +467,12 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                                             (status as any).paircode || 
                                             null;
             
-            // Se tem QR code ou pairing code, NÃO está conectado ainda - manter como connecting
+            // Se tem QR code ou pairing code, NÃO está conectado ainda - FORÇAR como connecting
             if ((hasQrCodeInResponse && String(hasQrCodeInResponse).trim() !== '') || 
                 (hasPairingCodeInResponse && String(hasPairingCodeInResponse).trim() !== '')) {
-              // Se está como "connected" no banco mas tem QR code, corrigir para "connecting"
-              if (instance.status === 'connected') {
-                console.log(`[SYNC] Instância ${instance.name} tem QR/Pairing code mas está como conectada - corrigindo para connecting`);
+              // SEMPRE atualizar para "connecting" se tem QR/pairing code, independente do status atual
+              if (instance.status !== 'connecting') {
+                console.log(`[SYNC] Instância ${instance.name} tem QR/Pairing code - FORÇANDO status para connecting`);
                 await supabase
                   .from('whatsapp_instances')
                   .update({ 
@@ -481,6 +481,23 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     pairing_code: hasPairingCodeInResponse || instance.pairing_code
                   })
                   .eq('id', instance.id);
+              } else {
+                // Já está como connecting, apenas atualizar QR/pairing code se mudou
+                const updates: any = {};
+                if (hasQrCodeInResponse && hasQrCodeInResponse !== instance.qr_code) {
+                  updates.qr_code = hasQrCodeInResponse;
+                  updates.pairing_code = null;
+                }
+                if (hasPairingCodeInResponse && hasPairingCodeInResponse !== instance.pairing_code) {
+                  updates.pairing_code = hasPairingCodeInResponse;
+                  updates.qr_code = null;
+                }
+                if (Object.keys(updates).length > 0) {
+                  await supabase
+                    .from('whatsapp_instances')
+                    .update(updates)
+                    .eq('id', instance.id);
+                }
               }
               continue; // Não verificar conexão se tem QR/pairing code
             }
@@ -523,59 +540,18 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               continue;
             }
 
-            // NOVA LÓGICA: Se está desconectada no banco e status é null, verificar indicadores parciais
-            // Isso corrige casos onde a API está conectada mas retorna resposta incompleta
-            if (connectionStatus === null && instance.status === 'disconnected') {
-              const statusData = (status as any).status;
-              const instanceData = (status as any).instance;
-              
-              // Verificar indicadores parciais que podem indicar conexão
-              const hasPartialIndicators = 
-                (statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@')) ||
-                (instanceData?.owner && typeof instanceData.owner === 'string') ||
-                (instanceData?.phone_number || statusData?.phone_number) ||
-                (instanceData?.profileName) ||
-                phoneNumber; // Já extraído acima
-              
-              // Se tem indicadores parciais, dar o benefício da dúvida e marcar como conectada
-              // (já que está desconectada no banco mas pode estar conectada na API)
-              if (hasPartialIndicators) {
-                console.log(`[SYNC] Instância ${instance.name}: Status indeterminado mas tem indicadores parciais de conexão - ATUALIZANDO para conectada`);
-                await supabase
-                  .from('whatsapp_instances')
-                  .update({
-                    status: 'connected',
-                    phone_number: phoneNumber || instance.phone_number || null,
-                    qr_code: null,
-                    pairing_code: null,
-                    last_disconnect_reason: null,
-                    last_disconnect_at: null,
-                  })
-                  .eq('id', instance.id);
-
-                loadInstances();
-                showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
-                
-                // Configurar Chatwoot se necessário
-                const { data: updatedInstance } = await supabase
-                  .from('whatsapp_instances')
-                  .select('*')
-                  .eq('id', instance.id)
-                  .single();
-                
-                if (updatedInstance) {
-                  await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
-                }
-              }
-              continue;
-            }
-
-            // Se connectionStatus é null e instância já está conectada, não alterar (já tratado acima)
+            // Se connectionStatus é null (indeterminado), manter status atual
+            // Não fazer nada para evitar mudanças indevidas
             if (connectionStatus === null) {
               continue;
             }
 
-            // Se está conectado na API mas desconectado no banco, atualizar para conectado (já tratado acima)
+            // Se connectionStatus é null (indeterminado), manter status atual
+            if (connectionStatus === null) {
+              continue;
+            }
+
+            // Se está conectado na API, atualizar para connected
             if (isConnectedInApi && instance.status !== 'connected') {
               await supabase
                 .from('whatsapp_instances')
@@ -595,6 +571,37 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               if (instance.status === 'disconnected') {
                 loadInstances();
                 showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
+              }
+            }
+            // Se está desconectado na API e não está como disconnected no banco, atualizar
+            else if (connectionStatus === false && instance.status !== 'disconnected') {
+              // Só atualizar se não estiver como "connecting" (pode estar aguardando QR code)
+              if (instance.status === 'connecting') {
+                // Se está como connecting mas API diz desconectado, verificar se tem QR code no banco
+                if (!instance.qr_code && !instance.pairing_code) {
+                  // Não tem QR code e API diz desconectado, então realmente está desconectado
+                  await supabase
+                    .from('whatsapp_instances')
+                    .update({
+                      status: 'disconnected',
+                      qr_code: null,
+                      pairing_code: null,
+                    })
+                    .eq('id', instance.id);
+                  console.log(`[SYNC] Instância ${instance.name} está desconectada na API - atualizando banco`);
+                }
+                // Se tem QR code no banco, manter como connecting (pode estar aguardando leitura)
+              } else {
+                // Se está como connected mas API diz desconectado, atualizar
+                await supabase
+                  .from('whatsapp_instances')
+                  .update({
+                    status: 'disconnected',
+                    qr_code: null,
+                    pairing_code: null,
+                  })
+                  .eq('id', instance.id);
+                console.log(`[SYNC] Instância ${instance.name} está desconectada na API - atualizando banco`);
               }
             }
             // PROTEÇÃO CRÍTICA: Só marcar como desconectado se:
@@ -1521,38 +1528,36 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                                   (status as any).paircode || 
                                   null;
         
-        // Se tem QR code ou pairing code, NÃO está conectado ainda - apenas atualizar QR/pairing code
+        // Se tem QR code ou pairing code, NÃO está conectado ainda - FORÇAR como connecting
         if (qrCodeFromApi && qrCodeFromApi.trim() !== '') {
-          console.log(`[POLLING:${instance.name}] QR code presente - mantendo como connecting`);
-          // Atualizar QR code no banco se mudou
-          if (qrCodeFromApi !== instance.qr_code) {
-            await supabase
-              .from('whatsapp_instances')
-              .update({ 
-                qr_code: qrCodeFromApi,
-                status: 'connecting' // Garantir que está como connecting
-              })
-              .eq('id', instance.id);
-            setQrCode(qrCodeFromApi);
-            setPairingCode('');
-          }
+          console.log(`[POLLING:${instance.name}] QR code presente - FORÇANDO status para connecting`);
+          // SEMPRE atualizar para "connecting" se tem QR code, independente do status atual
+          await supabase
+            .from('whatsapp_instances')
+            .update({ 
+              qr_code: qrCodeFromApi,
+              pairing_code: null,
+              status: 'connecting' // FORÇAR como connecting
+            })
+            .eq('id', instance.id);
+          setQrCode(qrCodeFromApi);
+          setPairingCode('');
           continue; // Não verificar conexão se tem QR code
         }
         
         if (pairingCodeFromApi && pairingCodeFromApi.trim() !== '') {
-          console.log(`[POLLING:${instance.name}] Pairing code presente - mantendo como connecting`);
-          // Atualizar pairing code no banco se mudou
-          if (pairingCodeFromApi !== instance.pairing_code) {
-            await supabase
-              .from('whatsapp_instances')
-              .update({ 
-                pairing_code: pairingCodeFromApi,
-                status: 'connecting' // Garantir que está como connecting
-              })
-              .eq('id', instance.id);
-            setPairingCode(pairingCodeFromApi);
-            setQrCode('');
-          }
+          console.log(`[POLLING:${instance.name}] Pairing code presente - FORÇANDO status para connecting`);
+          // SEMPRE atualizar para "connecting" se tem pairing code, independente do status atual
+          await supabase
+            .from('whatsapp_instances')
+            .update({ 
+              pairing_code: pairingCodeFromApi,
+              qr_code: null,
+              status: 'connecting' // FORÇAR como connecting
+            })
+            .eq('id', instance.id);
+          setPairingCode(pairingCodeFromApi);
+          setQrCode('');
           continue; // Não verificar conexão se tem pairing code
         }
         
@@ -1572,9 +1577,10 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           });
         }
 
-        // IMPORTANTE: Não marcar como conectado se ainda houver QR code ou pairing code ativo
-        // Isso evita falsos positivos quando o QR code ainda não foi lido
-        if (isConnected && !qrCodeFromApi && !pairingCodeFromApi) {
+        // IMPORTANTE: Só marcar como conectado se:
+        // 1. A API diz que está conectado (isConnected === true)
+        // 2. NÃO tem QR code ou pairing code (já verificado acima - se tivesse, teria dado continue)
+        if (isConnected && connectionStatus === true) {
           // Cancelar o timeout já que detectamos conexão
           if (timeoutId) {
             clearTimeout(timeoutId);
@@ -1615,21 +1621,21 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           if (updatedInstance) {
             await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
           }
-        } else if (qrCodeFromApi && qrCodeFromApi.trim() !== '') {
-          setQrCode(qrCodeFromApi);
-          setIsConnecting(false);
-          await supabase
-            .from('whatsapp_instances')
-            .update({ qr_code: qrCodeFromApi })
-            .eq('id', instance.id);
-        } else if (pairingCodeFromApi && pairingCodeFromApi.trim() !== '') {
-          setPairingCode(pairingCodeFromApi);
-          setIsConnecting(false);
-          await supabase
-            .from('whatsapp_instances')
-            .update({ pairing_code: pairingCodeFromApi })
-            .eq('id', instance.id);
+        } else if (connectionStatus === false) {
+          // Se a API diz explicitamente que está desconectado, atualizar para disconnected
+          if (instance.status !== 'disconnected') {
+            console.log(`[POLLING:${instance.name}] API diz desconectado - atualizando para disconnected`);
+            await supabase
+              .from('whatsapp_instances')
+              .update({
+                status: 'disconnected',
+                qr_code: null,
+                pairing_code: null,
+              })
+              .eq('id', instance.id);
+          }
         }
+        // Se connectionStatus === null, manter status atual (não atualizar)
       } catch (error) {
         console.error('Erro no polling:', error);
       }
