@@ -94,14 +94,22 @@ serve(async (req) => {
       );
     }
 
-    // Gera URL do link (usa a Edge Function connect para URL mais curta)
-    // Inclui apikey na URL para permitir acesso público
+    // Gera URL do link
+    // Opção 1: Se FRONTEND_URL estiver configurado, usa página HTML estática
+    // Opção 2: Caso contrário, usa Edge Function diretamente
+    const frontendUrl = Deno.env.get('FRONTEND_URL');
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || 'ctshqbxxlauulzsbapjb';
-    // URL aponta para a Edge Function 'connect' que retorna HTML
-    // Inclui apikey como query parameter para permitir acesso público
-    const linkUrl = `https://${projectRef}.supabase.co/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`;
+    
+    let linkUrl;
+    if (frontendUrl) {
+      // Usa página HTML estática (evita problemas de CSP)
+      linkUrl = `${frontendUrl}/connect.html?token=${linkToken}`;
+    } else {
+      // Usa Edge Function diretamente (pode ter problemas de CSP)
+      linkUrl = `https://${projectRef}.supabase.co/functions/v1/connect/${linkToken}?apikey=${encodeURIComponent(supabaseAnonKey)}`;
+    }
 
     return new Response(
       JSON.stringify({
