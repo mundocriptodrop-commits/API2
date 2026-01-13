@@ -1465,7 +1465,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             .eq('id', instance.id);
           setQrCode(qrCodeFromApi);
           setPairingCode('');
-          continue; // Não verificar conexão se tem QR code
+          return; // Não verificar conexão se tem QR code
         }
         
         if (pairingCodeFromApi && pairingCodeFromApi.trim() !== '') {
@@ -1481,7 +1481,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             .eq('id', instance.id);
           setPairingCode(pairingCodeFromApi);
           setQrCode('');
-          continue; // Não verificar conexão se tem pairing code
+          return; // Não verificar conexão se tem pairing code
         }
         
         // Só verificar conexão se NÃO tiver QR code ou pairing code
