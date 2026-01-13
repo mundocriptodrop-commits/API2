@@ -605,6 +605,7 @@ serve(async (req) => {
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'self' *;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Conectar WhatsApp</title>
   <style>
