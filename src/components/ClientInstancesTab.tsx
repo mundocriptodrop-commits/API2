@@ -313,15 +313,21 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     }
     
     // Verificar se há QR code ou pairing code ativo - se houver, NÃO está conectado ainda
-    const hasQrCode = (instanceData?.qrcode && instanceData.qrcode.length > 0) || 
-                     (statusResponse?.qrCode && statusResponse.qrCode.length > 0);
-    const hasPairingCode = (instanceData?.paircode && instanceData.paircode.length > 0) || 
-                          (statusResponse?.pairingCode && statusResponse.pairingCode.length > 0);
+    // PRIORIDADE MÁXIMA: Se tem QR code ou pairing code, NÃO está conectado
+    const hasQrCode = (instanceData?.qrcode && String(instanceData.qrcode).trim().length > 0) || 
+                     (statusResponse?.qrCode && String(statusResponse.qrCode).trim().length > 0) ||
+                     (statusData?.qrcode && String(statusData.qrcode).trim().length > 0) ||
+                     (statusData?.qrCode && String(statusData.qrCode).trim().length > 0);
+    const hasPairingCode = (instanceData?.paircode && String(instanceData.paircode).trim().length > 0) || 
+                          (statusResponse?.pairingCode && String(statusResponse.pairingCode).trim().length > 0) ||
+                          (statusData?.paircode && String(statusData.paircode).trim().length > 0) ||
+                          (statusData?.pairingCode && String(statusData.pairingCode).trim().length > 0);
     
-    // Se tem QR code ou pairing code, está em processo de conexão, não conectado
+    // Se tem QR code ou pairing code, está em processo de conexão, NÃO está conectado
+    // IMPORTANTE: Esta verificação deve ter PRIORIDADE sobre todos os outros indicadores
     if (hasQrCode || hasPairingCode) {
-      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ EM CONEXÃO - QR/Pairing code presente, não marcar como conectado`);
-      return null; // Manter status atual (provavelmente "connecting" ou "disconnected")
+      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ EM CONEXÃO - QR/Pairing code presente, NÃO marcar como conectado`);
+      return null; // Retornar null para manter status atual (não atualizar para connected)
     }
     
     // Se tem owner, phone_number, profileName ou status="connected", provavelmente está conectado
@@ -445,9 +451,44 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               // Se connectionStatus === false, será tratado com verificação dupla abaixo
             }
 
+            // Verificar se há QR code ou pairing code ANTES de verificar conexão
+            const hasQrCodeInResponse = (status as any).instance?.qrcode || 
+                                       (status as any).instance?.qrCode || 
+                                       (status as any).status?.qrcode || 
+                                       (status as any).status?.qrCode || 
+                                       (status as any).qrCode || 
+                                       (status as any).qrcode || 
+                                       null;
+            const hasPairingCodeInResponse = (status as any).instance?.paircode || 
+                                            (status as any).instance?.pairingCode || 
+                                            (status as any).status?.paircode || 
+                                            (status as any).status?.pairingCode || 
+                                            (status as any).pairingCode || 
+                                            (status as any).paircode || 
+                                            null;
+            
+            // Se tem QR code ou pairing code, NÃO está conectado ainda - manter como connecting
+            if ((hasQrCodeInResponse && String(hasQrCodeInResponse).trim() !== '') || 
+                (hasPairingCodeInResponse && String(hasPairingCodeInResponse).trim() !== '')) {
+              // Se está como "connected" no banco mas tem QR code, corrigir para "connecting"
+              if (instance.status === 'connected') {
+                console.log(`[SYNC] Instância ${instance.name} tem QR/Pairing code mas está como conectada - corrigindo para connecting`);
+                await supabase
+                  .from('whatsapp_instances')
+                  .update({ 
+                    status: 'connecting',
+                    qr_code: hasQrCodeInResponse || instance.qr_code,
+                    pairing_code: hasPairingCodeInResponse || instance.pairing_code
+                  })
+                  .eq('id', instance.id);
+              }
+              continue; // Não verificar conexão se tem QR/pairing code
+            }
+
             const isConnectedInApi = connectionStatus === true;
 
             // Se está conectado na API mas desconectado no banco, atualizar para conectado
+            // Só atualizar se NÃO tiver QR code ou pairing code (verificado acima)
             if (isConnectedInApi && instance.status !== 'connected') {
               await supabase
                 .from('whatsapp_instances')
@@ -1462,11 +1503,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         const instanceData = (status as any).instance;
         const statusData = (status as any).status;
         
-        // Usar a mesma lógica robusta para detectar conexão
-        const connectionStatus = getConnectionStatus(status, instance.name);
-        const isConnected = connectionStatus === true;
-        
-        // Verificar QR code em TODOS os formatos possíveis
+        // Verificar QR code em TODOS os formatos possíveis PRIMEIRO
         const qrCodeFromApi = instanceData?.qrcode || 
                              instanceData?.qrCode || 
                              statusData?.qrcode || 
@@ -1484,6 +1521,44 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                                   (status as any).paircode || 
                                   null;
         
+        // Se tem QR code ou pairing code, NÃO está conectado ainda - apenas atualizar QR/pairing code
+        if (qrCodeFromApi && qrCodeFromApi.trim() !== '') {
+          console.log(`[POLLING:${instance.name}] QR code presente - mantendo como connecting`);
+          // Atualizar QR code no banco se mudou
+          if (qrCodeFromApi !== instance.qr_code) {
+            await supabase
+              .from('whatsapp_instances')
+              .update({ 
+                qr_code: qrCodeFromApi,
+                status: 'connecting' // Garantir que está como connecting
+              })
+              .eq('id', instance.id);
+            setQrCode(qrCodeFromApi);
+            setPairingCode('');
+          }
+          continue; // Não verificar conexão se tem QR code
+        }
+        
+        if (pairingCodeFromApi && pairingCodeFromApi.trim() !== '') {
+          console.log(`[POLLING:${instance.name}] Pairing code presente - mantendo como connecting`);
+          // Atualizar pairing code no banco se mudou
+          if (pairingCodeFromApi !== instance.pairing_code) {
+            await supabase
+              .from('whatsapp_instances')
+              .update({ 
+                pairing_code: pairingCodeFromApi,
+                status: 'connecting' // Garantir que está como connecting
+              })
+              .eq('id', instance.id);
+            setPairingCode(pairingCodeFromApi);
+            setQrCode('');
+          }
+          continue; // Não verificar conexão se tem pairing code
+        }
+        
+        // Só verificar conexão se NÃO tiver QR code ou pairing code
+        const connectionStatus = getConnectionStatus(status, instance.name);
+        const isConnected = connectionStatus === true;
         const phoneNumber = extractPhoneNumber(status);
         
         // Log para debug
