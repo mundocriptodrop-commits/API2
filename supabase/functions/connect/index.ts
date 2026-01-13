@@ -599,15 +599,15 @@ serve(async (req) => {
     const qrCode = statusData.instance?.qrcode || statusData.qrCode || null;
     const pairingCode = statusData.instance?.paircode || statusData.pairingCode || null;
 
-    // Retorna HTML com QR code
+    // Retorna HTML com duas opções:
+    // 1. Se já tem QR code, mostra direto (conexão imediata)
+    // 2. Se não tem, mostra botão para conectar (link compartilhado)
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'self' *;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conectar WhatsApp</title>
+  <title>Conectar WhatsApp - ${instance.name || 'Instância'}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -628,8 +628,46 @@ serve(async (req) => {
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       text-align: center;
     }
-    h1 { color: #333; margin-bottom: 10px; font-size: 28px; }
-    p { color: #666; margin-bottom: 30px; line-height: 1.6; }
+    h1 { color: #333; margin-bottom: 20px; font-size: 28px; }
+    .instance-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .description {
+      color: #666;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+    .connect-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      margin-bottom: 20px;
+    }
+    .connect-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+    .connect-button:active {
+      transform: translateY(0);
+    }
+    .info {
+      margin-top: 30px;
+      padding: 15px;
+      background: #e3f2fd;
+      border-radius: 10px;
+      color: #1976d2;
+      font-size: 14px;
+    }
     .qr-container {
       background: #f8f9fa;
       border-radius: 15px;
@@ -637,13 +675,17 @@ serve(async (req) => {
       margin: 30px 0;
       display: inline-block;
     }
-    .qr-code { max-width: 100%; height: auto; }
+    .qr-code {
+      max-width: 100%;
+      height: auto;
+      margin: 20px 0;
+    }
     .pairing-code {
-      font-size: 32px;
+      font-size: 24px;
       font-weight: bold;
       color: #667eea;
-      letter-spacing: 8px;
-      margin: 20px 0;
+      letter-spacing: 4px;
+      margin: 15px 0;
       font-family: 'Courier New', monospace;
     }
     .status {
@@ -652,10 +694,6 @@ serve(async (req) => {
       border-radius: 10px;
       background: #e3f2fd;
       color: #1976d2;
-    }
-    .success {
-      background: #e8f5e9;
-      color: #2e7d32;
     }
     .loading {
       display: inline-block;
@@ -676,98 +714,84 @@ serve(async (req) => {
 <body>
   <div class="container">
     <h1>📱 Conectar WhatsApp</h1>
-    <p style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 10px;">${instance.name || 'Instância WhatsApp'}</p>
-    <p style="font-size: 14px; color: #666; margin-bottom: 30px;">Escaneie o QR Code abaixo com seu WhatsApp para conectar</p>
-    <div id="content">
+    <div class="instance-name">${instance.name || 'Instância WhatsApp'}</div>
+    
+    ${qrCode || pairingCode ? `
+      <!-- Opção 1: QR Code já disponível (conexão imediata) -->
+      <p class="description">Escaneie o QR Code abaixo com seu WhatsApp para conectar</p>
       ${qrCode ? `
         <div class="qr-container">
           <img src="${qrCode}" alt="QR Code" class="qr-code" />
         </div>
-        ${pairingCode ? `
-          <div style="margin-top: 20px;">
-            <p style="font-size: 14px; color: #666; margin-bottom: 10px;">Ou use o código de pareamento:</p>
-            <div class="pairing-code">${pairingCode}</div>
-          </div>
-        ` : ''}
-        <div class="status" style="margin-top: 30px;">
-          <p style="margin: 0;">⏳ Aguardando conexão...</p>
-          <p style="margin: 5px 0 0 0; font-size: 12px;">Este link expirará automaticamente após a conexão</p>
-        </div>
-      ` : pairingCode ? `
+      ` : ''}
+      ${pairingCode ? `
         <div style="margin-top: 20px;">
-          <p style="font-size: 16px; color: #333; margin-bottom: 15px; font-weight: 600;">Código de Pareamento:</p>
+          <p style="font-size: 14px; color: #666; margin-bottom: 10px;">Ou use o código de pareamento:</p>
           <div class="pairing-code">${pairingCode}</div>
-          <p style="font-size: 14px; color: #666; margin-top: 20px;">Digite este código no WhatsApp:</p>
-          <p style="font-size: 13px; color: #888; margin-top: 5px;">Configurações → Aparelhos conectados → Conectar um aparelho</p>
+          <p style="font-size: 13px; color: #888; margin-top: 10px;">Configurações → Aparelhos conectados → Conectar um aparelho</p>
         </div>
-        <div class="status" style="margin-top: 30px;">
-          <p style="margin: 0;">⏳ Aguardando conexão...</p>
-          <p style="margin: 5px 0 0 0; font-size: 12px;">Este link expirará automaticamente após a conexão</p>
-        </div>
-      ` : `
+      ` : ''}
+      <div class="status" style="margin-top: 30px;">
+        <p style="margin: 0;">⏳ Aguardando conexão...</p>
+        <p style="margin: 5px 0 0 0; font-size: 12px;">Este link expirará automaticamente após a conexão</p>
+      </div>
+    ` : `
+      <!-- Opção 2: Link compartilhado - mostra botão para conectar -->
+      <p class="description">Clique no botão abaixo para gerar o QR Code e conectar seu WhatsApp</p>
+      <button class="connect-button" onclick="connectWhatsApp()">
+        🔗 Conectar WhatsApp
+      </button>
+      <div id="qrContent" style="display: none;">
         <div class="loading"></div>
         <div class="status" style="margin-top: 20px;">
           <p style="margin: 0;">⏳ Preparando conexão...</p>
-          <p style="margin: 5px 0 0 0; font-size: 12px;">Aguarde alguns segundos e recarregue a página</p>
         </div>
-      `}
+      </div>
+    `}
+    
+    <div class="info">
+      <p>⏳ Este link expirará automaticamente após a conexão</p>
     </div>
   </div>
+  
   <script>
-    (function() {
-      const linkToken = '${linkToken}';
-      const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
-      const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
+    const linkToken = '${linkToken}';
+    const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
+    
+    function connectWhatsApp() {
+      const button = document.querySelector('.connect-button');
+      const qrContent = document.getElementById('qrContent');
       
-      // Auto-refresh a cada 3 segundos para verificar se conectou
-      const checkInterval = setInterval(async function() {
-        try {
-          const url = supabaseUrl + '/functions/v1/connect/' + linkToken + '?apikey=' + encodeURIComponent(supabaseAnonKey);
-          const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-              'apikey': supabaseAnonKey,
-              'Accept': 'application/json, text/html',
-            },
-          });
-          
-          const contentType = response.headers.get('content-type') || '';
-          
-          // Se a resposta é HTML (instância conectada), substitui a página
-          if (contentType.includes('text/html')) {
-            const html = await response.text();
-            if (html.includes('Conectado') || html.includes('WhatsApp Conectado') || html.includes('✅')) {
-              clearInterval(checkInterval);
-              document.open();
-              document.write(html);
-              document.close();
-              return;
-            }
-          }
-          
-          // Se a resposta é JSON, processa normalmente
-          if (contentType.includes('application/json')) {
-            const data = await response.json();
-            
-            if (data.connected) {
-              clearInterval(checkInterval);
-              const container = document.querySelector('.container');
-              if (container) {
-                container.innerHTML = '<h1>✅ Conectado!</h1><div class="status success"><h2>WhatsApp Conectado com Sucesso!</h2><p>Instância: ' + (data.instance_name || 'N/A') + '</p><p>Você pode fechar esta página.</p></div>';
-              }
-            } else if (data.qr_code && !document.querySelector('.qr-code')) {
-              // Atualiza QR code se aparecer
-              location.reload();
-            }
-          }
-        } catch (e) {
-          console.error('Error checking status:', e);
+      button.style.display = 'none';
+      qrContent.style.display = 'block';
+      
+      // Recarrega a página para buscar QR code
+      setTimeout(() => {
+        location.reload();
+      }, 1000);
+    }
+    
+    // Verifica conexão a cada 3 segundos
+    setInterval(function() {
+      fetch(supabaseUrl + '/functions/v1/connect/' + linkToken + '?apikey=' + encodeURIComponent(supabaseAnonKey), {
+        headers: { 'apikey': supabaseAnonKey }
+      })
+      .then(r => r.text())
+      .then(html => {
+        if (html.includes('Conectado') || html.includes('✅') || html.includes('WhatsApp Conectado')) {
+          document.body.innerHTML = '<div class="container"><h1>✅ Conectado!</h1><div class="info" style="background:#e8f5e9;color:#2e7d32;"><p>WhatsApp Conectado com Sucesso!</p><p>Você pode fechar esta página.</p></div></div>';
         }
-      }, 3000);
-      
-      // Se não tem QR code, recarrega após 5 segundos
-      ${!qrCode ? `setTimeout(function() { location.reload(); }, 5000);` : ''}
-    })();
+      })
+      .catch(e => console.error('Error:', e));
+    }, 3000);
+    
+    ${!qrCode && !pairingCode ? `
+    // Se não tem QR code, recarrega após 5 segundos para tentar buscar
+    setTimeout(function() {
+      location.reload();
+    }, 5000);
+    ` : ''}
   </script>
 </body>
 </html>`;
