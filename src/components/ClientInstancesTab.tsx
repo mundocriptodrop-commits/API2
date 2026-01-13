@@ -418,8 +418,15 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         }
 
         // Verificar cada instância e sincronizar status com a API
-        for (const instance of allInstances) {
+        // Adicionar delay entre requisições para evitar rate limiting
+        for (let i = 0; i < allInstances.length; i++) {
+          const instance = allInstances[i];
           if (!instance.instance_token) continue;
+
+          // Delay entre requisições (exceto a primeira)
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 200)); // 200ms entre requisições
+          }
 
           try {
             const status = await whatsappApi.getInstanceStatus(instance.instance_token);
@@ -428,7 +435,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             const phoneNumber = extractPhoneNumber(status);
             
             console.log(`[SYNC:${instance.name}] Status da API: ${apiStatus}, Status atual no banco: ${instance.status}`);
-            console.log(`[SYNC:${instance.name}] Resposta completa da API:`, JSON.stringify(status, null, 2));
 
             // PRIORIDADE: Usar o status diretamente da API se disponível
             // IMPORTANTE: Só atualizar se apiStatus não for null (se for null, manter status atual)
@@ -572,21 +578,35 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             
             // Se não está conectado no banco e não conseguimos determinar na API, não fazer nada
             continue;
-
-              if (Object.keys(updates).length > 0) {
+          } catch (error: any) {
+            // Tratar erros específicos da API
+            if (error?.status === 401) {
+              console.warn(`[SYNC:${instance.name}] ⚠️ Token inválido ou expirado (401) - pulando verificação`);
+              // Marcar como desconectado se o token é inválido
+              if (instance.status === 'connected' || instance.status === 'connecting') {
                 await supabase
                   .from('whatsapp_instances')
-                  .update(updates)
+                  .update({
+                    status: 'disconnected',
+                    qr_code: null,
+                    pairing_code: null,
+                  })
                   .eq('id', instance.id);
+                console.log(`[SYNC:${instance.name}] ⚠️ Atualizado para disconnected devido a token inválido`);
               }
+              continue; // Pular esta instância
+            } else if (error?.status === 404) {
+              console.warn(`[SYNC:${instance.name}] ⚠️ Instância não encontrada na API (404) - pulando verificação`);
+              continue; // Pular esta instância
+            } else if (error?.status === 500) {
+              console.error(`[SYNC:${instance.name}] ❌ Erro interno do servidor (500) - mantendo status atual`);
+              // Não atualizar status em caso de erro 500 - pode ser temporário
+              continue; // Pular esta instância
+            } else {
+              // Outros erros - não alterar status
+              console.warn(`[SYNC:${instance.name}] ⚠️ Erro ao verificar instância na API (mantendo status atual):`, error?.message || error);
+              continue; // Pular esta instância
             }
-          } catch (error: any) {
-            // Se houver erro ao consultar a API, NÃO alteramos o status no banco
-            // Isso evita marcar como desconectado quando a API está temporariamente indisponível
-            console.warn(`[SYNC] Erro ao verificar instância ${instance.name} na API (mantendo status atual):`, error?.message || error);
-            
-            // Apenas logar o erro, mas não alterar o status
-            // O status atual no banco será mantido até a próxima verificação bem-sucedida
           }
         }
       } catch (error) {
@@ -1537,8 +1557,44 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           }
         }
         // Se apiStatus === null ou 'connecting', manter status atual (não atualizar)
-      } catch (error) {
-        console.error('Erro no polling:', error);
+      } catch (error: any) {
+        // Tratar erros específicos da API
+        if (error?.status === 401) {
+          console.warn(`[POLLING:${instance.name}] ⚠️ Token inválido ou expirado (401) - parando polling`);
+          clearInterval(interval);
+          if (timeoutId) clearTimeout(timeoutId);
+          // Marcar como desconectado se o token é inválido
+          if (instance.status === 'connected' || instance.status === 'connecting') {
+            await supabase
+              .from('whatsapp_instances')
+              .update({
+                status: 'disconnected',
+                qr_code: null,
+                pairing_code: null,
+              })
+              .eq('id', instance.id);
+          }
+          setShowConnectModal(false);
+          setIsConnecting(false);
+          showToast('Token da instância inválido ou expirado. Por favor, reconecte a instância.', 'error');
+          loadInstances();
+          return;
+        } else if (error?.status === 404) {
+          console.warn(`[POLLING:${instance.name}] ⚠️ Instância não encontrada na API (404) - parando polling`);
+          clearInterval(interval);
+          if (timeoutId) clearTimeout(timeoutId);
+          setShowConnectModal(false);
+          setIsConnecting(false);
+          showToast('Instância não encontrada na API.', 'error');
+          loadInstances();
+          return;
+        } else if (error?.status === 500) {
+          console.error(`[POLLING:${instance.name}] ❌ Erro interno do servidor (500) - continuando polling`);
+          // Continuar tentando em caso de erro 500 (pode ser temporário)
+        } else {
+          console.error(`[POLLING:${instance.name}] ❌ Erro ao verificar status:`, error?.message || error);
+          // Continuar tentando em caso de outros erros
+        }
       }
     }, 3000);
 

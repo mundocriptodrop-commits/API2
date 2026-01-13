@@ -195,7 +195,21 @@ export const whatsappApi = {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to get instance status');
+      const errorText = await response.text().catch(() => 'Unknown error');
+      let errorMessage = 'Failed to get instance status';
+      
+      if (response.status === 401) {
+        errorMessage = 'Token inválido ou expirado';
+      } else if (response.status === 404) {
+        errorMessage = 'Instância não encontrada';
+      } else if (response.status === 500) {
+        errorMessage = 'Erro interno do servidor';
+      }
+      
+      const error: any = new Error(errorMessage);
+      error.status = response.status;
+      error.details = errorText;
+      throw error;
     }
 
     return response.json();
