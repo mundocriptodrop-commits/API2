@@ -74,6 +74,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     accountId: string;
     inboxId: string | null;
   } | null>(null);
+  const [selectedUserChatConfig, setSelectedUserChatConfig] = useState<{
+    url: string;
+    apiKey: string;
+    accountId: string;
+  } | null>(null);
 
   const summary = useMemo(() => {
     const allInstances = instances; // Já inclui próprias + sub-usuários
@@ -149,6 +154,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     setShowCreateModal(false);
     setInstanceName('');
     setChatEnabled(false);
+    setSelectedUserId('');
+    setSelectedUserChatConfig(null);
+    setChatConfigExpanded(false);
     onCloseCreate?.();
   };
 
@@ -187,6 +195,48 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       });
     }
   }, [user]);
+
+  // Buscar configurações de chat do usuário selecionado quando o modal de criação abrir
+  useEffect(() => {
+    async function loadSelectedUserChatConfig() {
+      if (!showCreateModal) return;
+
+      const userIdToCheck = selectedUserId || user?.id;
+      
+      if (!userIdToCheck) {
+        setSelectedUserChatConfig(null);
+        return;
+      }
+
+      try {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('chat_url, chat_api_key, chat_account_id')
+          .eq('id', userIdToCheck)
+          .single();
+
+        if (userProfile?.chat_url && userProfile?.chat_api_key && userProfile?.chat_account_id) {
+          setSelectedUserChatConfig({
+            url: userProfile.chat_url,
+            apiKey: userProfile.chat_api_key,
+            accountId: userProfile.chat_account_id,
+          });
+          // Se já tem configurações, ativar o chat automaticamente
+          setChatEnabled(true);
+        } else {
+          setSelectedUserChatConfig(null);
+          // Se não tem configurações, desativar o chat
+          setChatEnabled(false);
+        }
+      } catch (error) {
+        console.error('Error loading selected user chat config:', error);
+        setSelectedUserChatConfig(null);
+        setChatEnabled(false);
+      }
+    }
+
+    loadSelectedUserChatConfig();
+  }, [selectedUserId, showCreateModal, user?.id]);
 
   async function loadSubUsers() {
     if (!user) return Promise.resolve();
@@ -1033,9 +1083,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         let inboxId: number | null = null;
 
         // Se chat_enabled for true, criar inbox no Chatwoot via backend (evita CORS)
-        // Agora temos o instance_id para configurar o webhook automaticamente
-        // Verifica se já tem inbox_id para evitar criar duplicado
-        if (chatEnabled && profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id && newInstanceData?.id) {
+        // Usar as configurações do usuário selecionado (pode ser sub-usuário)
+        const chatConfigToUse = selectedUserChatConfig || (profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id ? {
+          url: profile.chat_url,
+          apiKey: profile.chat_api_key,
+          accountId: profile.chat_account_id,
+        } : null);
+
+        if (chatEnabled && chatConfigToUse && newInstanceData?.id) {
           // Verifica se já tem inbox_id (pode ter sido criado em uma tentativa anterior)
           if (!newInstanceData.admin_field_01) {
             try {
@@ -1047,9 +1102,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  chat_url: profile.chat_url,
-                  chat_api_key: profile.chat_api_key,
-                  chat_account_id: profile.chat_account_id,
+                  chat_url: chatConfigToUse.url,
+                  chat_api_key: chatConfigToUse.apiKey,
+                  chat_account_id: chatConfigToUse.accountId,
                   instance_name: instanceName,
                   instance_id: newInstanceData.id, // Passar instance_id para configurar webhook
                 }),
@@ -1093,7 +1148,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             inboxId = parseInt(newInstanceData.admin_field_01, 10);
             console.log(`[CHATWOOT] Instância já tem inbox_id: ${inboxId}, não criando duplicado.`);
           }
-        } else if (chatEnabled) {
+        } else if (chatEnabled && !chatConfigToUse) {
           showToast('Instância criada, mas não foi possível criar a inbox. Configure URL, API Key e Account ID do Chat nas configurações.', 'warning');
         }
 
@@ -2022,22 +2077,79 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                <div>
-                  <p className="font-medium text-gray-900">Conectar ao Chat</p>
-                  <p className="text-sm text-gray-500">
-                    Ativar integração com sistema de Chat (configuração para uso futuro)
-                  </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                  <div>
+                    <p className="font-medium text-gray-900">Conectar ao Chat</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedUserChatConfig 
+                        ? 'Integração configurada e pronta para uso'
+                        : 'Ativar integração com sistema de Chat (configuração para uso futuro)'}
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={chatEnabled}
+                      onChange={(e) => setChatEnabled(e.target.checked)}
+                      disabled={!selectedUserChatConfig}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${
+                      selectedUserChatConfig 
+                        ? 'bg-green-500 peer-checked:bg-green-500' 
+                        : 'bg-gray-200 peer-checked:bg-green-500 peer-disabled:opacity-50'
+                    }`}></div>
+                  </label>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={chatEnabled}
-                    onChange={(e) => setChatEnabled(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
-                </label>
+
+                {selectedUserChatConfig && (
+                  <div className="border border-green-200 rounded-lg bg-green-50/50">
+                    <button
+                      type="button"
+                      onClick={() => setChatConfigExpanded(!chatConfigExpanded)}
+                      className="w-full flex items-center justify-between p-3 text-left hover:bg-green-50 transition-colors rounded-lg"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <div>
+                          <p className="text-xs font-semibold text-green-900">Chat Configurado</p>
+                          <p className="text-xs text-green-700">Clique para ver configurações</p>
+                        </div>
+                      </div>
+                      {chatConfigExpanded ? (
+                        <ChevronUp className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-green-600" />
+                      )}
+                    </button>
+                    
+                    {chatConfigExpanded && (
+                      <div className="px-3 pb-3 space-y-2 border-t border-green-200 pt-3">
+                        <div>
+                          <label className="text-xs font-medium text-green-800 mb-1 block">URL do Chat</label>
+                          <p className="text-xs text-green-900 bg-white px-2 py-1.5 rounded border border-green-200 break-all">
+                            {selectedUserChatConfig.url}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-green-800 mb-1 block">API Key</label>
+                          <p className="text-xs text-green-900 bg-white px-2 py-1.5 rounded border border-green-200 font-mono">
+                            {selectedUserChatConfig.apiKey.length > 20 
+                              ? `${selectedUserChatConfig.apiKey.substring(0, 10)}...${selectedUserChatConfig.apiKey.substring(selectedUserChatConfig.apiKey.length - 10)}`
+                              : selectedUserChatConfig.apiKey}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-green-800 mb-1 block">Account ID</label>
+                          <p className="text-xs text-green-900 bg-white px-2 py-1.5 rounded border border-green-200">
+                            {selectedUserChatConfig.accountId}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
