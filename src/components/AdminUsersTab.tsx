@@ -1,15 +1,23 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../services/admin';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Plus, Edit2, Trash2, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import type { Database } from '../lib/database.types';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
+interface ProfileWithSubUsers extends Profile {
+  subUsers?: Profile[];
+  subUsersCount?: number;
+}
+
 export default function AdminUsersTab() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<ProfileWithSubUsers[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+  const [subUsersCache, setSubUsersCache] = useState<Map<string, Profile[]>>(new Map());
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -23,12 +31,71 @@ export default function AdminUsersTab() {
   async function loadProfiles() {
     try {
       const data = await adminApi.listUsers();
-      setProfiles(data.profiles || []);
+      // Filtrar apenas usuários principais (sem parent_user_id)
+      const mainUsers = (data.profiles || []).filter(p => !p.parent_user_id);
+      
+      // Buscar contagem de sub-usuários para cada usuário principal
+      const usersWithSubCount = await Promise.all(
+        mainUsers.map(async (user) => {
+          const { count } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('parent_user_id', user.id);
+          
+          return {
+            ...user,
+            subUsersCount: count || 0,
+          };
+        })
+      );
+      
+      setProfiles(usersWithSubCount);
     } catch (error) {
       console.error('Error loading profiles:', error);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadSubUsers(parentUserId: string) {
+    // Se já está no cache, não buscar novamente
+    if (subUsersCache.has(parentUserId)) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('parent_user_id', parentUserId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Adicionar ao cache
+      setSubUsersCache(prev => new Map(prev).set(parentUserId, data || []));
+      
+      // Atualizar profiles com sub-usuários
+      setProfiles(prev => prev.map(p => 
+        p.id === parentUserId 
+          ? { ...p, subUsers: data || [] }
+          : p
+      ));
+    } catch (error) {
+      console.error('Error loading sub-users:', error);
+    }
+  }
+
+  function toggleExpand(userId: string) {
+    const newExpanded = new Set(expandedUsers);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+      // Carregar sub-usuários quando expandir
+      loadSubUsers(userId);
+    }
+    setExpandedUsers(newExpanded);
   }
 
   async function handleCreateUser() {
@@ -72,6 +139,25 @@ export default function AdminUsersTab() {
 
     try {
       await adminApi.deleteUser(profileId);
+      
+      // Limpar cache de sub-usuários se necessário
+      const deletedProfile = profiles.find(p => p.id === profileId);
+      if (deletedProfile?.parent_user_id) {
+        // Se deletou um sub-usuário, limpar cache do pai
+        setSubUsersCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(deletedProfile.parent_user_id!);
+          return newCache;
+        });
+      } else {
+        // Se deletou um usuário principal, limpar seu cache
+        setSubUsersCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(profileId);
+          return newCache;
+        });
+      }
+      
       loadProfiles();
     } catch (error) {
       console.error('Error deleting profile:', error);
@@ -138,48 +224,131 @@ export default function AdminUsersTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {profiles.map((profile) => (
-                <tr key={profile.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {profile.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        profile.role === 'admin'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}
-                    >
-                      {profile.role === 'admin' ? 'Administrador' : 'Cliente'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {profile.max_instances || 'Ilimitado'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(profile.created_at).toLocaleDateString('pt-BR')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                    {profile.role === 'client' && (
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => openEditModal(profile)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              {profiles.map((profile) => {
+                const isExpanded = expandedUsers.has(profile.id);
+                const subUsers = profile.subUsers || subUsersCache.get(profile.id) || [];
+                const subUsersCount = profile.subUsersCount ?? subUsers.length;
+                const hasSubUsers = subUsersCount > 0;
+                
+                return (
+                  <>
+                    <tr key={profile.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="flex items-center space-x-2">
+                          {profile.role === 'client' && (
+                            <button
+                              onClick={() => toggleExpand(profile.id)}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              title={hasSubUsers ? `${subUsers.length} sub-usuário(s)` : 'Sem sub-usuários'}
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-gray-500" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-gray-500" />
+                              )}
+                            </button>
+                          )}
+                          <span>{profile.email}</span>
+                          {hasSubUsers && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                              <Users className="w-3 h-3" />
+                              {subUsersCount}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            profile.role === 'admin'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
                         >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProfile(profile.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                          {profile.role === 'admin' ? 'Administrador' : 'Cliente'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {profile.max_instances || 'Ilimitado'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(profile.created_at).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        {profile.role === 'client' && (
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => openEditModal(profile)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProfile(profile.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    
+                    {/* Linhas dos sub-usuários */}
+                    {isExpanded && hasSubUsers && subUsers.map((subUser) => (
+                      <tr key={subUser.id} className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <td className="px-6 py-3 text-sm text-gray-600">
+                          <div className="flex items-center space-x-2 pl-8">
+                            <span className="w-4 h-4 border-l-2 border-b-2 border-gray-300"></span>
+                            <span className="text-xs text-gray-500">└─</span>
+                            <span>{subUser.email}</span>
+                            <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                              Sub-usuário
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-600">
+                            Sub-usuário
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {subUser.max_instances || 'Ilimitado'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(subUser.created_at).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-right text-sm">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => openEditModal(subUser)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Editar sub-usuário"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProfile(subUser.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Excluir sub-usuário"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    
+                    {isExpanded && !hasSubUsers && (
+                      <tr className="bg-gray-50">
+                        <td colSpan={5} className="px-6 py-3 text-sm text-gray-500 italic pl-12">
+                          Nenhum sub-usuário cadastrado
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))}
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>
