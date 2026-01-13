@@ -681,61 +681,60 @@ serve(async (req) => {
     </div>
   </div>
   <script>
-    const linkToken = '${linkToken}';
-    const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
-    
-    // Auto-refresh a cada 3 segundos para verificar se conectou
-    const checkInterval = setInterval(async () => {
-      try {
-        const response = await fetch(\`\${supabaseUrl}/functions/v1/connect/\${linkToken}?apikey=\${supabaseAnonKey}\`, {
-          method: 'GET',
-          headers: {
-            'apikey': supabaseAnonKey,
-            'Accept': 'application/json, text/html',
-          },
-        });
-        
-        const contentType = response.headers.get('content-type') || '';
-        
-        // Se a resposta é HTML (instância conectada), substitui a página
-        if (contentType.includes('text/html')) {
-          const html = await response.text();
-          if (html.includes('Conectado') || html.includes('WhatsApp Conectado') || html.includes('✅')) {
-            clearInterval(checkInterval);
-            document.open();
-            document.write(html);
-            document.close();
-            return;
-          }
-        }
-        
-        // Se a resposta é JSON, processa normalmente
-        if (contentType.includes('application/json')) {
-          const data = await response.json();
+    (function() {
+      const linkToken = '${linkToken}';
+      const supabaseUrl = 'https://ctshqbxxlauulzsbapjb.supabase.co';
+      const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c2hxYnh4bGF1dWx6c2JhcGpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODgzMzUsImV4cCI6MjA3Nzk2NDMzNX0.NUcOBwoVOC4eE8BukporxYVzDyh0RAc8iQ1dM9qbalY';
+      
+      // Auto-refresh a cada 3 segundos para verificar se conectou
+      const checkInterval = setInterval(async function() {
+        try {
+          const url = supabaseUrl + '/functions/v1/connect/' + linkToken + '?apikey=' + encodeURIComponent(supabaseAnonKey);
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'apikey': supabaseAnonKey,
+              'Accept': 'application/json, text/html',
+            },
+          });
           
-          if (data.connected) {
-            clearInterval(checkInterval);
-            document.querySelector('.container').innerHTML = \`
-              <h1>✅ Conectado!</h1>
-              <div class="status success">
-                <h2>WhatsApp Conectado com Sucesso!</h2>
-                <p>Instância: \${data.instance_name || 'N/A'}</p>
-                <p>Você pode fechar esta página.</p>
-              </div>
-            \`;
-          } else if (data.qr_code && !document.querySelector('.qr-code')) {
-            // Atualiza QR code se aparecer
-            location.reload();
+          const contentType = response.headers.get('content-type') || '';
+          
+          // Se a resposta é HTML (instância conectada), substitui a página
+          if (contentType.includes('text/html')) {
+            const html = await response.text();
+            if (html.includes('Conectado') || html.includes('WhatsApp Conectado') || html.includes('✅')) {
+              clearInterval(checkInterval);
+              document.open();
+              document.write(html);
+              document.close();
+              return;
+            }
           }
+          
+          // Se a resposta é JSON, processa normalmente
+          if (contentType.includes('application/json')) {
+            const data = await response.json();
+            
+            if (data.connected) {
+              clearInterval(checkInterval);
+              const container = document.querySelector('.container');
+              if (container) {
+                container.innerHTML = '<h1>✅ Conectado!</h1><div class="status success"><h2>WhatsApp Conectado com Sucesso!</h2><p>Instância: ' + (data.instance_name || 'N/A') + '</p><p>Você pode fechar esta página.</p></div>';
+              }
+            } else if (data.qr_code && !document.querySelector('.qr-code')) {
+              // Atualiza QR code se aparecer
+              location.reload();
+            }
+          }
+        } catch (e) {
+          console.error('Error checking status:', e);
         }
-      } catch (e) {
-        console.error('Error checking status:', e);
-      }
-    }, 3000);
-    
-    // Se não tem QR code, recarrega após 5 segundos
-    ${!qrCode ? `setTimeout(() => location.reload(), 5000);` : ''}
+      }, 3000);
+      
+      // Se não tem QR code, recarrega após 5 segundos
+      ${!qrCode ? `setTimeout(function() { location.reload(); }, 5000);` : ''}
+    })();
   </script>
 </body>
 </html>`;
