@@ -1043,6 +1043,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   }
 
   async function handleCreateInstance() {
+    console.log('[CREATE_INSTANCE] Iniciando criação de instância...', {
+      instanceName,
+      chatEnabled,
+      hasSelectedConfig: !!selectedUserChatConfig,
+      hasManualConfig: !!(manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId)
+    });
+
     if (!instanceName.trim()) {
       showToast('Por favor, insira um nome para a instância', 'warning');
       return;
@@ -1056,12 +1063,25 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           : null
       );
 
+      console.log('[CREATE_INSTANCE] Validação do chat:', {
+        chatEnabled,
+        hasSelectedConfig: !!selectedUserChatConfig,
+        hasManualConfig: !!(manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId),
+        chatConfigToValidate: chatConfigToValidate ? {
+          hasUrl: !!chatConfigToValidate.url?.trim(),
+          hasApiKey: !!chatConfigToValidate.apiKey?.trim(),
+          hasAccountId: !!chatConfigToValidate.accountId?.trim()
+        } : null
+      });
+
       if (!chatConfigToValidate) {
+        console.warn('[CREATE_INSTANCE] Chat ativado mas sem configurações');
         showToast('Preencha todas as configurações do Chat (URL, API Key e Account ID) ou desative a integração', 'warning');
         return;
       }
 
-      if (!chatConfigToValidate.url.trim() || !chatConfigToValidate.apiKey.trim() || !chatConfigToValidate.accountId.trim()) {
+      if (!chatConfigToValidate.url?.trim() || !chatConfigToValidate.apiKey?.trim() || !chatConfigToValidate.accountId?.trim()) {
+        console.warn('[CREATE_INSTANCE] Chat ativado mas configurações incompletas');
         showToast('Preencha todas as configurações do Chat corretamente', 'warning');
         return;
       }
@@ -1245,8 +1265,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         throw new Error('API não retornou token de instância');
       }
     } catch (error: any) {
-      console.error('Error creating instance:', error);
-      showToast(error.message || 'Erro ao criar instância', 'error');
+      console.error('[CREATE_INSTANCE] Erro ao criar instância:', error);
+      console.error('[CREATE_INSTANCE] Detalhes do erro:', {
+        message: error?.message,
+        stack: error?.stack,
+        response: error?.response,
+        data: error?.data
+      });
+      showToast(error?.message || 'Erro ao criar instância', 'error');
     } finally {
       setCreating(false);
     }
@@ -2277,8 +2303,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                 Cancelar
               </button>
               <button
-                onClick={handleCreateInstance}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('[BUTTON] Botão Criar clicado');
+                  handleCreateInstance();
+                }}
                 disabled={creating}
+                type="button"
                 className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? 'Criando...' : 'Criar'}
