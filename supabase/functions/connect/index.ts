@@ -102,7 +102,11 @@ serve(async (req) => {
 </html>`;
       return new Response(errorHtml, {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -171,7 +175,11 @@ serve(async (req) => {
 </html>`;
       return new Response(errorHtml, {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
     
@@ -250,7 +258,11 @@ serve(async (req) => {
 </html>`;
       return new Response(errorHtml, {
         status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -305,7 +317,11 @@ serve(async (req) => {
 </html>`;
       return new Response(usedHtml, {
         status: 410,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -356,7 +372,11 @@ serve(async (req) => {
 </html>`;
       return new Response(expiredHtml, {
         status: 410,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -417,7 +437,11 @@ serve(async (req) => {
 
       return new Response(successHtml, {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -469,7 +493,11 @@ serve(async (req) => {
 </html>`;
       return new Response(errorHtml, {
         status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -559,7 +587,11 @@ serve(async (req) => {
 </html>`;
       return new Response(errorHtml, {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        },
       });
     }
 
@@ -744,6 +776,8 @@ serve(async (req) => {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+        'X-Frame-Options': 'SAMEORIGIN',
       },
     });
   } catch (error) {
@@ -794,7 +828,11 @@ serve(async (req) => {
 </html>`;
     return new Response(errorHtml, {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co https://*.supabase.co data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ctshqbxxlauulzsbapjb.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;",
+      },
     });
   }
 });
