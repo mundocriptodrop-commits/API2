@@ -79,6 +79,16 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     apiKey: string;
     accountId: string;
   } | null>(null);
+  const [manualChatConfig, setManualChatConfig] = useState<{
+    url: string;
+    apiKey: string;
+    accountId: string;
+  }>({
+    url: '',
+    apiKey: '',
+    accountId: '',
+  });
+  const [showManualChatConfig, setShowManualChatConfig] = useState(false);
 
   const summary = useMemo(() => {
     const allInstances = instances; // Já inclui próprias + sub-usuários
@@ -157,6 +167,12 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     setSelectedUserId('');
     setSelectedUserChatConfig(null);
     setChatConfigExpanded(false);
+    setShowManualChatConfig(false);
+    setManualChatConfig({
+      url: '',
+      apiKey: '',
+      accountId: '',
+    });
     onCloseCreate?.();
   };
 
@@ -1032,6 +1048,25 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return;
     }
 
+    // Validar configurações do chat se estiver ativado
+    if (chatEnabled) {
+      const chatConfigToValidate = selectedUserChatConfig || (
+        manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId
+          ? manualChatConfig
+          : null
+      );
+
+      if (!chatConfigToValidate) {
+        showToast('Preencha todas as configurações do Chat (URL, API Key e Account ID) ou desative a integração', 'warning');
+        return;
+      }
+
+      if (!chatConfigToValidate.url.trim() || !chatConfigToValidate.apiKey.trim() || !chatConfigToValidate.accountId.trim()) {
+        showToast('Preencha todas as configurações do Chat corretamente', 'warning');
+        return;
+      }
+    }
+
     // Verificar limite considerando todas as instâncias (próprias + sub-usuários)
     const totalInstances = instances.length;
     const limit = profile?.max_instances ?? 0;
@@ -1083,12 +1118,12 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         let inboxId: number | null = null;
 
         // Se chat_enabled for true, criar inbox no Chatwoot via backend (evita CORS)
-        // Usar as configurações do usuário selecionado (pode ser sub-usuário)
-        const chatConfigToUse = selectedUserChatConfig || (profile?.chat_url && profile?.chat_api_key && profile?.chat_account_id ? {
-          url: profile.chat_url,
-          apiKey: profile.chat_api_key,
-          accountId: profile.chat_account_id,
-        } : null);
+        // Usar as configurações do usuário selecionado (pode ser sub-usuário) ou configuração manual
+        const chatConfigToUse = selectedUserChatConfig || (
+          manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId
+            ? manualChatConfig
+            : null
+        );
 
         if (chatEnabled && chatConfigToUse && newInstanceData?.id) {
           // Verifica se já tem inbox_id (pode ter sido criado em uma tentativa anterior)
@@ -1149,7 +1184,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             console.log(`[CHATWOOT] Instância já tem inbox_id: ${inboxId}, não criando duplicado.`);
           }
         } else if (chatEnabled && !chatConfigToUse) {
-          showToast('Instância criada, mas não foi possível criar a inbox. Configure URL, API Key e Account ID do Chat nas configurações.', 'warning');
+          showToast('Instância criada, mas não foi possível criar a inbox. Preencha todas as configurações do Chat.', 'warning');
+        }
+
+        // Se foi configurado manualmente e não tinha configuração no perfil, salvar no perfil
+        if (chatEnabled && chatConfigToUse && !selectedUserChatConfig && manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId) {
+          try {
+            const userIdToSave = selectedUserId || user?.id;
+            if (userIdToSave) {
+              await supabase
+                .from('profiles')
+                .update({
+                  chat_url: manualChatConfig.url,
+                  chat_api_key: manualChatConfig.apiKey,
+                  chat_account_id: manualChatConfig.accountId,
+                })
+                .eq('id', userIdToSave);
+              
+              console.log('[CHAT_CONFIG] Configurações salvas no perfil do usuário');
+              // Atualizar o estado para refletir as configurações salvas
+              setSelectedUserChatConfig(manualChatConfig);
+            }
+          } catch (error) {
+            console.error('[CHAT_CONFIG] Erro ao salvar configurações no perfil:', error);
+            // Não falhar a criação se não conseguir salvar no perfil
+          }
         }
 
         if (chatEnabled && inboxId) {
@@ -2084,26 +2143,32 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     <p className="text-sm text-gray-500">
                       {selectedUserChatConfig 
                         ? 'Integração configurada e pronta para uso'
-                        : 'Ativar integração com sistema de Chat (configuração para uso futuro)'}
+                        : 'Ativar integração com sistema de Chat'}
                     </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={chatEnabled}
-                      onChange={(e) => setChatEnabled(e.target.checked)}
-                      disabled={!selectedUserChatConfig}
+                      onChange={(e) => {
+                        setChatEnabled(e.target.checked);
+                        if (!e.target.checked) {
+                          setShowManualChatConfig(false);
+                        } else if (!selectedUserChatConfig) {
+                          setShowManualChatConfig(true);
+                        }
+                      }}
                       className="sr-only peer"
                     />
                     <div className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${
-                      selectedUserChatConfig 
-                        ? 'bg-green-500 peer-checked:bg-green-500' 
-                        : 'bg-gray-200 peer-checked:bg-green-500 peer-disabled:opacity-50'
+                      chatEnabled 
+                        ? 'bg-green-500' 
+                        : 'bg-gray-200'
                     }`}></div>
                   </label>
                 </div>
 
-                {selectedUserChatConfig && (
+                {chatEnabled && selectedUserChatConfig && (
                   <div className="border border-green-200 rounded-lg bg-green-50/50">
                     <button
                       type="button"
@@ -2148,6 +2213,57 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {chatEnabled && !selectedUserChatConfig && (
+                  <div className="border border-blue-200 rounded-lg bg-blue-50/50 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4 text-blue-600" />
+                      <p className="text-sm font-semibold text-blue-900">Configurar Chat</p>
+                    </div>
+                    <p className="text-xs text-blue-700">
+                      Preencha as informações abaixo para configurar a integração com o Chat
+                    </p>
+                    
+                    <div>
+                      <label className="block text-xs font-medium text-blue-800 mb-1">
+                        URL do Chat
+                      </label>
+                      <input
+                        type="text"
+                        value={manualChatConfig.url}
+                        onChange={(e) => setManualChatConfig({ ...manualChatConfig, url: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="https://chat.exemplo.com.br"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-medium text-blue-800 mb-1">
+                        API Key
+                      </label>
+                      <input
+                        type="text"
+                        value={manualChatConfig.apiKey}
+                        onChange={(e) => setManualChatConfig({ ...manualChatConfig, apiKey: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                        placeholder="Sua API Key do Chat"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-medium text-blue-800 mb-1">
+                        Account ID
+                      </label>
+                      <input
+                        type="text"
+                        value={manualChatConfig.accountId}
+                        onChange={(e) => setManualChatConfig({ ...manualChatConfig, accountId: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="ID da conta"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
