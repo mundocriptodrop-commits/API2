@@ -233,9 +233,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
         if (userProfile?.chat_url && userProfile?.chat_api_key && userProfile?.chat_account_id) {
           setSelectedUserChatConfig({
-            url: userProfile.chat_url,
-            apiKey: userProfile.chat_api_key,
-            accountId: userProfile.chat_account_id,
+            url: String(userProfile.chat_url || ''),
+            apiKey: String(userProfile.chat_api_key || ''),
+            accountId: String(userProfile.chat_account_id || ''),
           });
           // Se já tem configurações, ativar o chat automaticamente
           setChatEnabled(true);
@@ -1080,7 +1080,10 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         return;
       }
 
-      if (!chatConfigToValidate.url?.trim() || !chatConfigToValidate.apiKey?.trim() || !chatConfigToValidate.accountId?.trim()) {
+      // Converter accountId para string antes de validar (pode ser número)
+      const accountIdStr = String(chatConfigToValidate.accountId || '').trim();
+      
+      if (!chatConfigToValidate.url?.trim() || !chatConfigToValidate.apiKey?.trim() || !accountIdStr) {
         console.warn('[CREATE_INSTANCE] Chat ativado mas configurações incompletas');
         showToast('Preencha todas as configurações do Chat corretamente', 'warning');
         return;
