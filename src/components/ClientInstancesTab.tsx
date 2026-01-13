@@ -277,7 +277,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
   // Helper function para determinar o status de conexão baseado na resposta da API
   // Retorna: true (conectado), false (desconectado), null (indeterminado - não mudar status)
   // POLÍTICA: Ser MUITO CONSERVADOR - só retorna false se tiver ABSOLUTA CERTEZA
-  function getConnectionStatus(statusResponse: any, instanceName: string): boolean | null {
+  // Função auxiliar para extrair o status da API
+  // Retorna: 'connected' | 'connecting' | 'disconnected' | null (se não conseguir determinar)
+  function getStatusFromApi(statusResponse: any, instanceName: string): 'connected' | 'connecting' | 'disconnected' | null {
     const statusData = statusResponse?.status;
     const instanceData = statusResponse?.instance;
 
@@ -287,33 +289,18 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return null;
     }
 
-    // INDICADORES DE CONEXÃO - Qualquer um desses indica que está conectado
-    // Prioridade: verificar indicadores mais confiáveis primeiro
-    const hasLoggedInTrue = statusData?.loggedIn === true;
-    const hasConnectedTrue = statusData?.connected === true;
-    const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
-    const hasOwner = instanceData?.owner && typeof instanceData.owner === 'string' && instanceData.owner.length > 0;
-    const hasPhoneNumber = (instanceData?.phone_number && instanceData.phone_number.length > 0) || 
-                          (statusData?.phone_number && statusData.phone_number.length > 0);
-    const hasProfileName = instanceData?.profileName && typeof instanceData.profileName === 'string' && instanceData.profileName.length > 0;
-    // Verificação adicional: status como string "connected" no instanceData
-    const hasStatusConnected = instanceData?.status === 'connected' || instanceData?.status === 'Connected';
-    
-    // Se tem QUALQUER indicador positivo de conexão, está conectado
-    // PRIORIDADE: loggedIn e connected são os mais confiáveis
-    if (hasLoggedInTrue || hasConnectedTrue) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - loggedIn/connected = true`);
-      return true;
+    // PRIORIDADE 1: Usar o campo status diretamente da API se disponível
+    // A API retorna: "disconnected", "connecting", "connected"
+    const apiStatus = instanceData?.status;
+    if (apiStatus && typeof apiStatus === 'string') {
+      const normalizedStatus = apiStatus.toLowerCase();
+      if (normalizedStatus === 'connected' || normalizedStatus === 'connecting' || normalizedStatus === 'disconnected') {
+        console.log(`[STATUS_CHECK:${instanceName}] 📡 Status da API: ${normalizedStatus}`);
+        return normalizedStatus as 'connected' | 'connecting' | 'disconnected';
+      }
     }
-    
-    // Se tem JID válido, está conectado (JID só existe quando conectado)
-    if (hasJid) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - JID presente`);
-      return true;
-    }
-    
-    // Verificar se há QR code ou pairing code ativo - se houver, NÃO está conectado ainda
-    // PRIORIDADE MÁXIMA: Se tem QR code ou pairing code, NÃO está conectado
+
+    // PRIORIDADE 2: Verificar QR code ou pairing code - se houver, está "connecting"
     const hasQrCode = (instanceData?.qrcode && String(instanceData.qrcode).trim().length > 0) || 
                      (statusResponse?.qrCode && String(statusResponse.qrCode).trim().length > 0) ||
                      (statusData?.qrcode && String(statusData.qrcode).trim().length > 0) ||
@@ -323,24 +310,42 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                           (statusData?.paircode && String(statusData.paircode).trim().length > 0) ||
                           (statusData?.pairingCode && String(statusData.pairingCode).trim().length > 0);
     
-    // Se tem QR code ou pairing code, está em processo de conexão, NÃO está conectado
-    // IMPORTANTE: Esta verificação deve ter PRIORIDADE sobre todos os outros indicadores
     if (hasQrCode || hasPairingCode) {
-      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ EM CONEXÃO - QR/Pairing code presente, NÃO marcar como conectado`);
-      return null; // Retornar null para manter status atual (não atualizar para connected)
+      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ EM CONEXÃO - QR/Pairing code presente`);
+      return 'connecting';
     }
+
+    // PRIORIDADE 3: Verificar indicadores de conexão
+    const hasLoggedInTrue = statusData?.loggedIn === true;
+    const hasConnectedTrue = statusData?.connected === true;
+    const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
     
-    // Se tem owner, phone_number, profileName ou status="connected", provavelmente está conectado
-    // MAS só se NÃO tiver QR code ativo (verificado acima)
-    if (hasOwner || hasPhoneNumber || hasProfileName || hasStatusConnected) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Indicadores secundários:`, {
-        hasOwner: !!hasOwner,
-        hasPhoneNumber: !!hasPhoneNumber,
-        hasProfileName: !!hasProfileName,
-        hasStatusConnected: !!hasStatusConnected
-      });
-      return true;
+    if (hasLoggedInTrue || hasConnectedTrue || hasJid) {
+      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Indicadores positivos`);
+      return 'connected';
     }
+
+    // PRIORIDADE 4: Verificar indicadores de desconexão
+    const hasLoggedInFalse = statusData?.loggedIn === false;
+    const hasConnectedFalse = statusData?.connected === false;
+    
+    if (hasLoggedInFalse && hasConnectedFalse) {
+      console.log(`[STATUS_CHECK:${instanceName}] ❌ DESCONECTADO - Indicadores negativos`);
+      return 'disconnected';
+    }
+
+    // Se não conseguir determinar, retornar null para manter status atual
+    console.log(`[STATUS_CHECK:${instanceName}] ⚠️ INDETERMINADO - Mantendo status atual`);
+    return null;
+  }
+
+  // Função legada mantida para compatibilidade (retorna boolean | null)
+  function getConnectionStatus(statusResponse: any, instanceName: string): boolean | null {
+    const apiStatus = getStatusFromApi(statusResponse, instanceName);
+    
+    if (apiStatus === 'connected') return true;
+    if (apiStatus === 'disconnected') return false;
+    return null; // connecting ou null (indeterminado)
 
     // INDICADORES DE DESCONEXÃO - Ser MUITO CONSERVADOR
     // Só retornamos false se tivermos ABSOLUTA CERTEZA
@@ -402,110 +407,122 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
           try {
             const status = await whatsappApi.getInstanceStatus(instance.instance_token);
-            const connectionStatus = getConnectionStatus(status, instance.name);
+            const apiStatus = getStatusFromApi(status, instance.name);
             const statusData = (status as any).status;
             const phoneNumber = extractPhoneNumber(status);
+            
+            console.log(`[SYNC:${instance.name}] Status da API: ${apiStatus}, Status atual no banco: ${instance.status}`);
 
-            // PROTEÇÃO CRÍTICA: Se está conectado no banco e status é null/indeterminado, 
-            // NUNCA marcar como desconectado - manter como conectado
-            // ADICIONAL: Se a resposta da API tem QUALQUER indicador positivo, considerar conectado
-            if (instance.status === 'connected') {
-              if (connectionStatus === null) {
-                // Status indeterminado mas está conectado no banco - verificar indicadores na resposta
-                const statusData = (status as any).status;
-                const instanceData = (status as any).instance;
+            // PRIORIDADE: Usar o status diretamente da API se disponível
+            if (apiStatus) {
+              // Se o status da API é diferente do status no banco, atualizar
+              if (apiStatus !== instance.status) {
+                console.log(`[SYNC] Instância ${instance.name}: API diz "${apiStatus}", banco tem "${instance.status}" - ATUALIZANDO`);
                 
-                // Verificar se há QUALQUER indicador positivo na resposta (mesmo que não detectado pela função)
-                const hasAnyPositiveIndicator = 
-                  statusData?.loggedIn === true ||
-                  statusData?.connected === true ||
-                  (statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@')) ||
-                  (instanceData?.owner && typeof instanceData.owner === 'string' && instanceData.owner.length > 0) ||
-                  (instanceData?.phone_number && instanceData.phone_number.length > 0) ||
-                  (statusData?.phone_number && statusData.phone_number.length > 0) ||
-                  (instanceData?.profileName && typeof instanceData.profileName === 'string' && instanceData.profileName.length > 0) ||
-                  instanceData?.status === 'connected';
+                const updates: any = {
+                  status: apiStatus,
+                };
                 
-                if (hasAnyPositiveIndicator) {
-                  console.log(`[SYNC] Instância ${instance.name}: Status indeterminado mas tem indicadores positivos na API - MANTENDO como conectada`);
-                  // Atualizar dados se necessário (número, etc) mas manter como conectado
-                  const updates: any = {};
-                  if (phoneNumber && phoneNumber !== instance.phone_number) {
-                    updates.phone_number = phoneNumber;
+                // Se está como connecting, atualizar QR/pairing code
+                if (apiStatus === 'connecting') {
+                  const hasQrCodeInResponse = (status as any).instance?.qrcode || 
+                                             (status as any).instance?.qrCode || 
+                                             (status as any).status?.qrcode || 
+                                             (status as any).status?.qrCode || 
+                                             (status as any).qrCode || 
+                                             (status as any).qrcode || 
+                                             null;
+                  const hasPairingCodeInResponse = (status as any).instance?.paircode || 
+                                                   (status as any).instance?.pairingCode || 
+                                                   (status as any).status?.paircode || 
+                                                   (status as any).status?.pairingCode || 
+                                                   (status as any).pairingCode || 
+                                                   (status as any).paircode || 
+                                                   null;
+                  
+                  if (hasQrCodeInResponse && String(hasQrCodeInResponse).trim() !== '') {
+                    updates.qr_code = hasQrCodeInResponse;
+                    updates.pairing_code = null;
+                  } else if (hasPairingCodeInResponse && String(hasPairingCodeInResponse).trim() !== '') {
+                    updates.pairing_code = hasPairingCodeInResponse;
+                    updates.qr_code = null;
                   }
+                } else if (apiStatus === 'connected') {
+                  // Se está conectado, limpar QR/pairing code
+                  updates.qr_code = null;
+                  updates.pairing_code = null;
+                  updates.phone_number = phoneNumber || instance.phone_number || null;
+                  updates.last_disconnect_reason = null;
+                  updates.last_disconnect_at = null;
+                } else if (apiStatus === 'disconnected') {
+                  // Se está desconectado, limpar QR/pairing code
+                  updates.qr_code = null;
+                  updates.pairing_code = null;
+                }
+                
+                await supabase
+                  .from('whatsapp_instances')
+                  .update(updates)
+                  .eq('id', instance.id);
+                
+                // Se mudou de disconnected para connected, recarregar e configurar Chatwoot
+                if (instance.status === 'disconnected' && apiStatus === 'connected') {
+                  loadInstances();
+                  showToast(`Instância "${instance.name}" reconectou automaticamente.`, 'success');
+                  
+                  const { data: updatedInstance } = await supabase
+                    .from('whatsapp_instances')
+                    .select('*')
+                    .eq('id', instance.id)
+                    .single();
+                  
+                  if (updatedInstance) {
+                    await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
+                  }
+                }
+              } else {
+                // Status já está correto, apenas atualizar QR/pairing code se necessário
+                if (apiStatus === 'connecting') {
+                  const hasQrCodeInResponse = (status as any).instance?.qrcode || 
+                                             (status as any).instance?.qrCode || 
+                                             (status as any).status?.qrcode || 
+                                             (status as any).status?.qrCode || 
+                                             (status as any).qrCode || 
+                                             (status as any).qrcode || 
+                                             null;
+                  const hasPairingCodeInResponse = (status as any).instance?.paircode || 
+                                                  (status as any).instance?.pairingCode || 
+                                                  (status as any).status?.paircode || 
+                                                  (status as any).status?.pairingCode || 
+                                                  (status as any).pairingCode || 
+                                                  (status as any).paircode || 
+                                                  null;
+                  
+                  const updates: any = {};
+                  if (hasQrCodeInResponse && hasQrCodeInResponse !== instance.qr_code) {
+                    updates.qr_code = hasQrCodeInResponse;
+                    updates.pairing_code = null;
+                  } else if (hasPairingCodeInResponse && hasPairingCodeInResponse !== instance.pairing_code) {
+                    updates.pairing_code = hasPairingCodeInResponse;
+                    updates.qr_code = null;
+                  }
+                  
                   if (Object.keys(updates).length > 0) {
                     await supabase
                       .from('whatsapp_instances')
                       .update(updates)
                       .eq('id', instance.id);
                   }
-                  continue;
-                }
-                
-                // Se não tem indicadores positivos mas está conectado no banco, manter como conectado
-                console.log(`[SYNC] Instância ${instance.name}: Status indeterminado mas está conectada no banco - MANTENDO como conectada`);
-                continue;
-              }
-              
-              // Se connectionStatus === true, já será tratado abaixo
-              // Se connectionStatus === false, será tratado com verificação dupla abaixo
-            }
-
-            // Verificar se há QR code ou pairing code ANTES de verificar conexão
-            const hasQrCodeInResponse = (status as any).instance?.qrcode || 
-                                       (status as any).instance?.qrCode || 
-                                       (status as any).status?.qrcode || 
-                                       (status as any).status?.qrCode || 
-                                       (status as any).qrCode || 
-                                       (status as any).qrcode || 
-                                       null;
-            const hasPairingCodeInResponse = (status as any).instance?.paircode || 
-                                            (status as any).instance?.pairingCode || 
-                                            (status as any).status?.paircode || 
-                                            (status as any).status?.pairingCode || 
-                                            (status as any).pairingCode || 
-                                            (status as any).paircode || 
-                                            null;
-            
-            // Se tem QR code ou pairing code, NÃO está conectado ainda - FORÇAR como connecting
-            if ((hasQrCodeInResponse && String(hasQrCodeInResponse).trim() !== '') || 
-                (hasPairingCodeInResponse && String(hasPairingCodeInResponse).trim() !== '')) {
-              // SEMPRE atualizar para "connecting" se tem QR/pairing code, independente do status atual
-              if (instance.status !== 'connecting') {
-                console.log(`[SYNC] Instância ${instance.name} tem QR/Pairing code - FORÇANDO status para connecting`);
-                await supabase
-                  .from('whatsapp_instances')
-                  .update({ 
-                    status: 'connecting',
-                    qr_code: hasQrCodeInResponse || instance.qr_code,
-                    pairing_code: hasPairingCodeInResponse || instance.pairing_code
-                  })
-                  .eq('id', instance.id);
-              } else {
-                // Já está como connecting, apenas atualizar QR/pairing code se mudou
-                const updates: any = {};
-                if (hasQrCodeInResponse && hasQrCodeInResponse !== instance.qr_code) {
-                  updates.qr_code = hasQrCodeInResponse;
-                  updates.pairing_code = null;
-                }
-                if (hasPairingCodeInResponse && hasPairingCodeInResponse !== instance.pairing_code) {
-                  updates.pairing_code = hasPairingCodeInResponse;
-                  updates.qr_code = null;
-                }
-                if (Object.keys(updates).length > 0) {
-                  await supabase
-                    .from('whatsapp_instances')
-                    .update(updates)
-                    .eq('id', instance.id);
                 }
               }
-              continue; // Não verificar conexão se tem QR/pairing code
+              continue; // Status já foi atualizado usando a API
             }
 
+            // Fallback: Se não conseguiu determinar status da API, usar lógica antiga
+            const connectionStatus = getConnectionStatus(status, instance.name);
             const isConnectedInApi = connectionStatus === true;
 
             // Se está conectado na API mas desconectado no banco, atualizar para conectado
-            // Só atualizar se NÃO tiver QR code ou pairing code (verificado acima)
             if (isConnectedInApi && instance.status !== 'connected') {
               await supabase
                 .from('whatsapp_instances')
@@ -1562,14 +1579,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         }
         
         // Só verificar conexão se NÃO tiver QR code ou pairing code
-        const connectionStatus = getConnectionStatus(status, instance.name);
-        const isConnected = connectionStatus === true;
+        // Usar o status diretamente da API (mais confiável)
+        const apiStatus = getStatusFromApi(status, instance.name);
         const phoneNumber = extractPhoneNumber(status);
         
         // Log para debug
         if (pollCount <= 3 || qrCodeFromApi || pairingCodeFromApi) {
           console.log(`[POLLING:${instance.name}] Tentativa ${pollCount}:`, {
-            isConnected,
+            apiStatus,
             hasQrCode: !!qrCodeFromApi,
             hasPairingCode: !!pairingCodeFromApi,
             instanceData: !!instanceData,
@@ -1577,10 +1594,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           });
         }
 
-        // IMPORTANTE: Só marcar como conectado se:
-        // 1. A API diz que está conectado (isConnected === true)
-        // 2. NÃO tem QR code ou pairing code (já verificado acima - se tivesse, teria dado continue)
-        if (isConnected && connectionStatus === true) {
+        // Usar o status diretamente da API
+        if (apiStatus === 'connected') {
           // Cancelar o timeout já que detectamos conexão
           if (timeoutId) {
             clearTimeout(timeoutId);
@@ -1621,7 +1636,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           if (updatedInstance) {
             await configureChatwootIfNeeded(updatedInstance as WhatsAppInstance);
           }
-        } else if (connectionStatus === false) {
+        } else if (apiStatus === 'disconnected') {
           // Se a API diz explicitamente que está desconectado, atualizar para disconnected
           if (instance.status !== 'disconnected') {
             console.log(`[POLLING:${instance.name}] API diz desconectado - atualizando para disconnected`);
@@ -1635,7 +1650,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               .eq('id', instance.id);
           }
         }
-        // Se connectionStatus === null, manter status atual (não atualizar)
+        // Se apiStatus === null ou 'connecting', manter status atual (não atualizar)
       } catch (error) {
         console.error('Erro no polling:', error);
       }
