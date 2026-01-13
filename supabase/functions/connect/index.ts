@@ -26,12 +26,33 @@ serve(async (req) => {
     const pathParts = url.pathname.split('/').filter(p => p);
     let linkToken = pathParts[pathParts.length - 1];
     
-    // Aceita apikey como query parameter para acesso público
-    // Isso permite que o navegador acesse a função sem header
+    // Verifica apikey (pode vir do header ou query parameter)
+    // Esta função usa --no-verify-jwt, então verificamos manualmente
+    const apikeyFromHeader = req.headers.get('apikey');
     const apikeyFromQuery = url.searchParams.get('apikey');
-    if (apikeyFromQuery && !req.headers.get('apikey')) {
-      // Se apikey está na query mas não no header, adiciona ao header
-      req.headers.set('apikey', apikeyFromQuery);
+    const apikey = apikeyFromHeader || apikeyFromQuery;
+    const expectedAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    
+    // Valida apikey (deve ser ANON_KEY para acesso público)
+    if (!apikey || apikey !== expectedAnonKey) {
+      // Se não tem apikey válido, retorna HTML com JavaScript que faz a requisição correta
+      if (!apikeyFromQuery) {
+        // Redireciona para a mesma URL com apikey na query
+        const redirectUrl = `${url.origin}${url.pathname}?apikey=${encodeURIComponent(expectedAnonKey)}`;
+        return new Response(null, {
+          status: 302,
+          headers: {
+            ...corsHeaders,
+            'Location': redirectUrl,
+          },
+        });
+      }
+      
+      // Se tem apikey mas é inválido, retorna erro
+      return new Response(
+        JSON.stringify({ code: 401, message: 'Invalid API key' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (!linkToken || linkToken === 'connect') {

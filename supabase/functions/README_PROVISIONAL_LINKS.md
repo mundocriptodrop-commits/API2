@@ -29,9 +29,11 @@ SUPABASE_SERVICE_ROLE_KEY=[sua-service-role-key]
 # Deploy da função de gerar links
 supabase functions deploy generate-provisional-link
 
-# Deploy da função de exibir QR code
-supabase functions deploy connect
+# Deploy da função de exibir QR code (sem verificação JWT para permitir acesso público)
+supabase functions deploy connect --no-verify-jwt
 ```
+
+**Importante**: A função `connect` usa `--no-verify-jwt` porque precisa ser acessível publicamente via navegador. A validação do `apikey` é feita manualmente dentro da função.
 
 ## Como Funciona
 
