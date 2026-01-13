@@ -1637,12 +1637,31 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     // Buscar configurações do chat se a instância tiver chat habilitado
     if (instance.chat_enabled && instance.admin_field_01) {
       try {
+        console.log('[CHAT_CONFIG] Buscando configurações do chat para instância:', {
+          instanceId: instance.id,
+          userId: instance.user_id,
+          chatEnabled: instance.chat_enabled,
+          inboxId: instance.admin_field_01
+        });
+        
         // Buscar configurações do perfil do usuário dono da instância
-        const { data: profileData } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('chat_url, chat_api_key, chat_account_id')
           .eq('id', instance.user_id)
           .single();
+        
+        if (profileError) {
+          console.error('[CHAT_CONFIG] Erro ao buscar perfil:', profileError);
+          setChatConfig(null);
+          return;
+        }
+        
+        console.log('[CHAT_CONFIG] Dados do perfil encontrados:', {
+          hasUrl: !!profileData?.chat_url,
+          hasApiKey: !!profileData?.chat_api_key,
+          hasAccountId: !!profileData?.chat_account_id
+        });
         
         if (profileData?.chat_url && profileData?.chat_api_key && profileData?.chat_account_id) {
           setChatConfig({
@@ -1651,14 +1670,20 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             accountId: profileData.chat_account_id,
             inboxId: instance.admin_field_01,
           });
+          console.log('[CHAT_CONFIG] Configurações do chat carregadas com sucesso');
         } else {
+          console.warn('[CHAT_CONFIG] Configurações do chat incompletas no perfil');
           setChatConfig(null);
         }
       } catch (error) {
-        console.error('Error loading chat config:', error);
+        console.error('[CHAT_CONFIG] Erro ao carregar configurações do chat:', error);
         setChatConfig(null);
       }
     } else {
+      console.log('[CHAT_CONFIG] Instância não tem chat habilitado ou inbox_id:', {
+        chatEnabled: instance.chat_enabled,
+        hasInboxId: !!instance.admin_field_01
+      });
       setChatConfig(null);
     }
     
@@ -2103,63 +2128,64 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                       Formato: código do país + DDD + número (sem espaços ou caracteres especiais)
                     </p>
                   </div>
+                </>
+              )}
 
-                  {chatConfig && (
-                    <div className="border border-green-200 rounded-lg bg-green-50/50">
-                      <button
-                        type="button"
-                        onClick={() => setChatConfigExpanded(!chatConfigExpanded)}
-                        className="w-full flex items-center justify-between p-4 text-left hover:bg-green-50 transition-colors rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <CheckCircle2 className="h-5 w-5 text-green-600" />
-                          <div>
-                            <p className="text-sm font-semibold text-green-900">Chat Configurado</p>
-                            <p className="text-xs text-green-700">Integração ativa e pronta para uso</p>
-                          </div>
-                        </div>
-                        {chatConfigExpanded ? (
-                          <ChevronUp className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-green-600" />
-                        )}
-                      </button>
-                      
-                      {chatConfigExpanded && (
-                        <div className="px-4 pb-4 space-y-3 border-t border-green-200 pt-4">
-                          <div>
-                            <label className="text-xs font-medium text-green-800 mb-1 block">URL do Chat</label>
-                            <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 break-all">
-                              {chatConfig.url}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-green-800 mb-1 block">API Key</label>
-                            <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 font-mono">
-                              {chatConfig.apiKey.length > 20 
-                                ? `${chatConfig.apiKey.substring(0, 10)}...${chatConfig.apiKey.substring(chatConfig.apiKey.length - 10)}`
-                                : chatConfig.apiKey}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-green-800 mb-1 block">Account ID</label>
-                            <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200">
-                              {chatConfig.accountId}
-                            </p>
-                          </div>
-                          {chatConfig.inboxId && (
-                            <div>
-                              <label className="text-xs font-medium text-green-800 mb-1 block">Inbox ID</label>
-                              <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200">
-                                {chatConfig.inboxId}
-                              </p>
-                            </div>
-                          )}
+              {/* Seção de configurações do chat - aparece sempre que houver configuração */}
+              {chatConfig && (
+                <div className="border border-green-200 rounded-lg bg-green-50/50">
+                  <button
+                    type="button"
+                    onClick={() => setChatConfigExpanded(!chatConfigExpanded)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-green-50 transition-colors rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-900">Chat Configurado</p>
+                        <p className="text-xs text-green-700">Integração ativa e pronta para uso</p>
+                      </div>
+                    </div>
+                    {chatConfigExpanded ? (
+                      <ChevronUp className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-green-600" />
+                    )}
+                  </button>
+                  
+                  {chatConfigExpanded && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-green-200 pt-4">
+                      <div>
+                        <label className="text-xs font-medium text-green-800 mb-1 block">URL do Chat</label>
+                        <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 break-all">
+                          {chatConfig.url}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-green-800 mb-1 block">API Key</label>
+                        <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 font-mono">
+                          {chatConfig.apiKey.length > 20 
+                            ? `${chatConfig.apiKey.substring(0, 10)}...${chatConfig.apiKey.substring(chatConfig.apiKey.length - 10)}`
+                            : chatConfig.apiKey}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-green-800 mb-1 block">Account ID</label>
+                        <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200">
+                          {chatConfig.accountId}
+                        </p>
+                      </div>
+                      {chatConfig.inboxId && (
+                        <div>
+                          <label className="text-xs font-medium text-green-800 mb-1 block">Inbox ID</label>
+                          <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200">
+                            {chatConfig.inboxId}
+                          </p>
                         </div>
                       )}
                     </div>
                   )}
-                </>
+                </div>
               )}
 
               {qrCode && (
