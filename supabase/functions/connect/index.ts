@@ -643,21 +643,40 @@ serve(async (req) => {
 <body>
   <div class="container">
     <h1>📱 Conectar WhatsApp</h1>
-    <p>${instance.name ? `Instância: ${instance.name}` : 'Escaneie o QR code abaixo com seu WhatsApp'}</p>
+    <p style="font-size: 18px; font-weight: 600; color: #333; margin-bottom: 10px;">${instance.name || 'Instância WhatsApp'}</p>
+    <p style="font-size: 14px; color: #666; margin-bottom: 30px;">Escaneie o QR Code abaixo com seu WhatsApp para conectar</p>
     <div id="content">
       ${qrCode ? `
         <div class="qr-container">
           <img src="${qrCode}" alt="QR Code" class="qr-code" />
         </div>
-        ${pairingCode ? `<div class="pairing-code">${pairingCode}</div><p style="font-size: 14px; color: #666;">Ou digite este código no WhatsApp</p>` : ''}
-        <div class="status">Aguardando conexão... Este link expirará automaticamente após a conexão.</div>
+        ${pairingCode ? `
+          <div style="margin-top: 20px;">
+            <p style="font-size: 14px; color: #666; margin-bottom: 10px;">Ou use o código de pareamento:</p>
+            <div class="pairing-code">${pairingCode}</div>
+          </div>
+        ` : ''}
+        <div class="status" style="margin-top: 30px;">
+          <p style="margin: 0;">⏳ Aguardando conexão...</p>
+          <p style="margin: 5px 0 0 0; font-size: 12px;">Este link expirará automaticamente após a conexão</p>
+        </div>
       ` : pairingCode ? `
-        <div class="pairing-code">${pairingCode}</div>
-        <p>Digite este código no WhatsApp: Configurações → Aparelhos conectados → Conectar um aparelho</p>
-        <div class="status">Aguardando conexão... Este link expirará automaticamente após a conexão.</div>
+        <div style="margin-top: 20px;">
+          <p style="font-size: 16px; color: #333; margin-bottom: 15px; font-weight: 600;">Código de Pareamento:</p>
+          <div class="pairing-code">${pairingCode}</div>
+          <p style="font-size: 14px; color: #666; margin-top: 20px;">Digite este código no WhatsApp:</p>
+          <p style="font-size: 13px; color: #888; margin-top: 5px;">Configurações → Aparelhos conectados → Conectar um aparelho</p>
+        </div>
+        <div class="status" style="margin-top: 30px;">
+          <p style="margin: 0;">⏳ Aguardando conexão...</p>
+          <p style="margin: 5px 0 0 0; font-size: 12px;">Este link expirará automaticamente após a conexão</p>
+        </div>
       ` : `
         <div class="loading"></div>
-        <div class="status">Preparando conexão... Aguarde alguns segundos e recarregue a página.</div>
+        <div class="status" style="margin-top: 20px;">
+          <p style="margin: 0;">⏳ Preparando conexão...</p>
+          <p style="margin: 5px 0 0 0; font-size: 12px;">Aguarde alguns segundos e recarregue a página</p>
+        </div>
       `}
     </div>
   </div>
@@ -726,6 +745,7 @@ serve(async (req) => {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/html; charset=utf-8',
+        'Content-Encoding': 'utf-8',
       },
     });
   } catch (error) {
