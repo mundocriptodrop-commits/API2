@@ -96,7 +96,7 @@ export default function ClientSubUsersTab() {
       alert(message);
       setShowModal(false);
       setEditingUser(null);
-      setFormData({ email: '', password: '', maxInstances: 1 });
+      setFormData({ email: '', password: '', maxInstances: 1, companyName: '' });
       loadSubUsers();
     } catch (error: any) {
       alert(error.message || 'Erro ao atualizar sub-usuário');
@@ -125,7 +125,7 @@ export default function ClientSubUsersTab() {
 
   function openEditModal(user: SubUser) {
     setEditingUser(user);
-    setFormData({ email: user.email, password: '', maxInstances: user.max_instances });
+    setFormData({ email: user.email, password: '', maxInstances: user.max_instances, companyName: '' });
     setShowModal(true);
   }
 
