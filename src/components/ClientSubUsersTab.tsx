@@ -14,6 +14,12 @@ export default function ClientSubUsersTab() {
     password: '',
     maxInstances: 1,
   });
+  const [configureChatEnabled, setConfigureChatEnabled] = useState(false);
+  const [chatConfig, setChatConfig] = useState({
+    chat_url: '',
+    chat_api_key: '',
+    chat_account_id: '',
+  });
 
   useEffect(() => {
     loadSubUsers();
@@ -37,17 +43,34 @@ export default function ClientSubUsersTab() {
       return;
     }
 
+    if (configureChatEnabled) {
+      if (!chatConfig.chat_url.trim() || !chatConfig.chat_api_key.trim() || !chatConfig.chat_account_id.trim()) {
+        alert('Por favor, preencha todas as configurações do chat.');
+        return;
+      }
+    }
+
     try {
+      const chatConfigData = configureChatEnabled
+        ? {
+            chat_url: chatConfig.chat_url,
+            chat_api_key: chatConfig.chat_api_key,
+            chat_account_id: parseInt(chatConfig.chat_account_id),
+          }
+        : null;
+
       await clientSubUsersApi.createSubUser(
         formData.email,
         formData.password,
         formData.maxInstances,
-        null
+        chatConfigData
       );
 
       alert(`Sub-usuário criado com sucesso!\n\nEmail: ${formData.email}\nSenha: ${formData.password}`);
       setShowModal(false);
       setFormData({ email: '', password: '', maxInstances: 1 });
+      setConfigureChatEnabled(false);
+      setChatConfig({ chat_url: '', chat_api_key: '', chat_account_id: '' });
       loadSubUsers();
     } catch (error: any) {
       alert(error.message || 'Erro ao criar sub-usuário');
@@ -93,6 +116,8 @@ export default function ClientSubUsersTab() {
   function openCreateModal() {
     setEditingUser(null);
     setFormData({ email: '', password: '', maxInstances: 1 });
+    setConfigureChatEnabled(false);
+    setChatConfig({ chat_url: '', chat_api_key: '', chat_account_id: '' });
     setShowModal(true);
   }
 
@@ -295,6 +320,81 @@ export default function ClientSubUsersTab() {
                   </p>
                 )}
               </div>
+
+              {!editingUser && (
+                <>
+                  <div className="pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">Configurar Chat</h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Configure as integrações do Chat para o sub-usuário
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setConfigureChatEnabled(!configureChatEnabled)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          configureChatEnabled ? 'bg-blue-600' : 'bg-gray-200'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            configureChatEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {configureChatEnabled && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            URL do Chat
+                          </label>
+                          <input
+                            type="url"
+                            value={chatConfig.chat_url}
+                            onChange={(e) =>
+                              setChatConfig({ ...chatConfig, chat_url: e.target.value })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            placeholder="https://chat.exemplo.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            API Key do Chat
+                          </label>
+                          <input
+                            type="text"
+                            value={chatConfig.chat_api_key}
+                            onChange={(e) =>
+                              setChatConfig({ ...chatConfig, chat_api_key: e.target.value })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            placeholder="sua-api-key"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Account ID do Chat
+                          </label>
+                          <input
+                            type="number"
+                            value={chatConfig.chat_account_id}
+                            onChange={(e) =>
+                              setChatConfig({ ...chatConfig, chat_account_id: e.target.value })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            placeholder="123456"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">

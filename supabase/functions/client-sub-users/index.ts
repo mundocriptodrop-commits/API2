@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
 
     // CREATE SUB-USER
     if (req.method === 'POST' && path === '/create') {
-      const { email, password, maxInstances } = await req.json();
+      const { email, password, maxInstances, chatConfig } = await req.json();
 
       if (!email || !password || !maxInstances) {
         return new Response(
@@ -126,7 +126,7 @@ Deno.serve(async (req: Request) => {
       if (available !== -1 && maxInstances > available) {
         return new Response(
           JSON.stringify({ 
-            error: `Você só tem ${available} instâncias disponíveis. Você já está usando ${totalUsed} de ${parentProfile.max_instances}.` 
+            error: `Voc\u00ea s\u00f3 tem ${available} inst\u00e2ncias dispon\u00edveis. Voc\u00ea j\u00e1 est\u00e1 usando ${totalUsed} de ${parentProfile.max_instances}.` 
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -137,7 +137,7 @@ Deno.serve(async (req: Request) => {
 
       if (userExists) {
         return new Response(
-          JSON.stringify({ error: 'Este email já está cadastrado no sistema' }),
+          JSON.stringify({ error: 'Este email j\u00e1 est\u00e1 cadastrado no sistema' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -150,25 +150,33 @@ Deno.serve(async (req: Request) => {
 
       if (authError) {
         return new Response(
-          JSON.stringify({ error: authError.message || 'Erro ao criar usuário' }),
+          JSON.stringify({ error: authError.message || 'Erro ao criar usu\u00e1rio' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
+      const profileData: any = {
+        id: authData.user.id,
+        email,
+        role: 'client',
+        max_instances: maxInstances,
+        parent_user_id: user.id,
+      };
+
+      if (chatConfig) {
+        profileData.chat_url = chatConfig.chat_url;
+        profileData.chat_api_key = chatConfig.chat_api_key;
+        profileData.chat_account_id = chatConfig.chat_account_id;
+      }
+
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .insert({
-          id: authData.user.id,
-          email,
-          role: 'client',
-          max_instances: maxInstances,
-          parent_user_id: user.id,
-        });
+        .insert(profileData);
 
       if (profileError) {
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return new Response(
-          JSON.stringify({ error: 'Erro ao criar perfil do usuário' }),
+          JSON.stringify({ error: 'Erro ao criar perfil do usu\u00e1rio' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -199,7 +207,7 @@ Deno.serve(async (req: Request) => {
 
       if (!subUser) {
         return new Response(
-          JSON.stringify({ error: 'Sub-usuário não encontrado' }),
+          JSON.stringify({ error: 'Sub-usu\u00e1rio n\u00e3o encontrado' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -256,7 +264,7 @@ Deno.serve(async (req: Request) => {
 
       if (!subUser) {
         return new Response(
-          JSON.stringify({ error: 'Sub-usuário não encontrado' }),
+          JSON.stringify({ error: 'Sub-usu\u00e1rio n\u00e3o encontrado' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
