@@ -102,17 +102,25 @@ async function handleListCompanies(supabaseClient: any, userId: string) {
         .select('*', { count: 'exact', head: true })
         .eq('company_id', company.id);
 
-      const { count: instancesCount } = await supabaseClient
-        .from('whatsapp_instances')
-        .select('wi.*, p.company_id', { count: 'exact', head: true })
-        .eq('p.company_id', company.id)
-        .from('profiles as p')
-        .eq('wi.user_id', 'p.id');
+      const { data: companyUsers } = await supabaseClient
+        .from('profiles')
+        .select('id')
+        .eq('company_id', company.id);
+
+      let instancesCount = 0;
+      if (companyUsers && companyUsers.length > 0) {
+        const userIds = companyUsers.map((u: any) => u.id);
+        const { count } = await supabaseClient
+          .from('whatsapp_instances')
+          .select('*', { count: 'exact', head: true })
+          .in('user_id', userIds);
+        instancesCount = count || 0;
+      }
 
       return {
         ...company,
         users_count: usersCount || 0,
-        instances_count: instancesCount || 0,
+        instances_count: instancesCount,
       };
     })
   );
