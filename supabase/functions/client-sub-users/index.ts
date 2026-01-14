@@ -1,3 +1,4 @@
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -17,21 +18,32 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
 
-    const authHeader = req.headers.get('Authorization')!;
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Verificar se o usuário tem perfil
-    const { data: currentProfile, error: profileError } = await supabase
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized', details: userError?.message }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: currentProfile, error: profileError } = await supabaseClient
       .from('profiles')
       .select('id, max_instances, parent_user_id')
       .eq('id', user.id)
@@ -39,33 +51,25 @@ Deno.serve(async (req: Request) => {
 
     if (profileError || !currentProfile) {
       return new Response(
-        JSON.stringify({ error: 'Profile not found' }),
+        JSON.stringify({ error: 'Profile not found', details: profileError?.message }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Não permitir que sub-usuários criem outros sub-usuários
     if (currentProfile.parent_user_id) {
       return new Response(
-        JSON.stringify({ error: 'Sub-users cannot create other sub-users' }),
+        JSON.stringify({ error: 'Sub-users cannot manage other sub-users' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const url = new URL(req.url);
-    const path = url.pathname.replace('/client-sub-users', '');
+    const path = url.pathname.split('/client-sub-users')[1] || '';
 
-    // Listar sub-usuários
     if (req.method === 'GET' && path === '/list') {
-      const { data: subUsers, error } = await supabase
+      const { data: subUsers, error } = await supabaseClient
         .from('profiles')
-        .select(`
-          id,
-          email,
-          max_instances,
-          created_at,
-          updated_at
-        `)
+        .select('id, email, max_instances, created_at, updated_at')
         .eq('parent_user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -76,10 +80,9 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Buscar contagem de instâncias de cada sub-usuário
       const subUsersWithCounts = await Promise.all(
         (subUsers || []).map(async (subUser) => {
-          const { count } = await supabase
+          const { count } = await supabaseClient
             .from('whatsapp_instances')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', subUser.id);
@@ -97,9 +100,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Criar sub-usuário
     if (req.method === 'POST' && path === '/create') {
-      const { email, password, maxInstances, chatConfig } = await req.json();
+      const { email, password, maxInstances } = await req.json();
 
       if (!email || !password || !maxInstances) {
         return new Response(
@@ -108,32 +110,27 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Verificar se o usuário tem instâncias disponíveis
-      const parentUserId = currentProfile.id;
-      const { data: parentProfile } = await supabase
+      const { data: parentProfile } = await supabaseClient
         .from('profiles')
         .select('max_instances')
-        .eq('id', parentUserId)
+        .eq('id', user.id)
         .single();
 
-      // Contar instâncias usadas pelo pai
-      const { count: parentInstances } = await supabase
+      const { count: parentInstances } = await supabaseClient
         .from('whatsapp_instances')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', parentUserId);
+        .eq('user_id', user.id);
 
-      // Buscar todos os sub-usuários
-      const { data: subUsers } = await supabase
+      const { data: subUsers } = await supabaseClient
         .from('profiles')
         .select('id')
-        .eq('parent_user_id', parentUserId);
+        .eq('parent_user_id', user.id);
 
       const subUserIds = subUsers?.map(u => u.id) || [];
       
-      // Contar instâncias de todos os sub-usuários
       let subUserInstances = 0;
       if (subUserIds.length > 0) {
-        const { count } = await supabase
+        const { count } = await supabaseClient
           .from('whatsapp_instances')
           .select('*', { count: 'exact', head: true })
           .in('user_id', subUserIds);
@@ -154,8 +151,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Verificar se email já existe
-      const { data: existingUser } = await supabase.auth.admin.listUsers();
+      const { data: existingUser } = await supabaseClient.auth.admin.listUsers();
       const userExists = existingUser?.users?.some(u => u.email === email);
 
       if (userExists) {
@@ -165,8 +161,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Criar usuário
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
@@ -179,28 +174,18 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Criar perfil com parent_user_id e configurações de chat (se fornecidas)
-      const profileData: any = {
-        id: authData.user.id,
-        email,
-        role: 'client',
-        max_instances: maxInstances,
-        parent_user_id: user.id,
-      };
-
-      // Adicionar configurações de chat se fornecidas
-      if (chatConfig && chatConfig.chat_url && chatConfig.chat_api_key && chatConfig.chat_account_id) {
-        profileData.chat_url = chatConfig.chat_url;
-        profileData.chat_api_key = chatConfig.chat_api_key;
-        profileData.chat_account_id = chatConfig.chat_account_id;
-      }
-
-      const { error: profileError } = await supabase
+      const { error: profileError } = await supabaseClient
         .from('profiles')
-        .insert(profileData);
+        .insert({
+          id: authData.user.id,
+          email,
+          role: 'client',
+          max_instances: maxInstances,
+          parent_user_id: user.id,
+        });
 
       if (profileError) {
-        await supabase.auth.admin.deleteUser(authData.user.id);
+        await supabaseClient.auth.admin.deleteUser(authData.user.id);
         return new Response(
           JSON.stringify({ error: 'Erro ao criar perfil do usuário' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -213,7 +198,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Atualizar sub-usuário
     if (req.method === 'PUT' && path === '/update') {
       const { userId, maxInstances, password } = await req.json();
 
@@ -224,8 +208,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Verificar se é sub-usuário do usuário atual
-      const { data: subUser, error: subUserError } = await supabase
+      const { data: subUser, error: subUserError } = await supabaseClient
         .from('profiles')
         .select('id, max_instances')
         .eq('id', userId)
@@ -239,60 +222,8 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Verificar disponibilidade (similar ao create)
-      const parentUserId = currentProfile.id;
-      const { data: parentProfile } = await supabase
-        .from('profiles')
-        .select('max_instances')
-        .eq('id', parentUserId)
-        .single();
-
-      const { count: parentInstances } = await supabase
-        .from('whatsapp_instances')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', parentUserId);
-
-      const { data: subUsers } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('parent_user_id', parentUserId);
-
-      const subUserIds = subUsers?.map(u => u.id) || [];
-      
-      let subUserInstances = 0;
-      if (subUserIds.length > 0) {
-        const { count } = await supabase
-          .from('whatsapp_instances')
-          .select('*', { count: 'exact', head: true })
-          .in('user_id', subUserIds);
-        subUserInstances = count || 0;
-      }
-
-      // Contar instâncias atuais deste sub-usuário
-      const { count: currentSubUserInstances } = await supabase
-        .from('whatsapp_instances')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-
-      const totalUsed = (parentInstances || 0) + subUserInstances - (currentSubUserInstances || 0);
-      const available = parentProfile?.max_instances 
-        ? parentProfile.max_instances - totalUsed 
-        : -1;
-
-      if (available !== -1 && maxInstances > available) {
-        return new Response(
-          JSON.stringify({ 
-            error: `Você só tem ${available} instâncias disponíveis para este sub-usuário.` 
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Atualizar perfil
-      const updateData: any = { max_instances: maxInstances };
-      
       if (password && password.trim() !== '') {
-        const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+        const { error: updateError } = await supabaseClient.auth.admin.updateUserById(userId, {
           password,
         });
         if (updateError) {
@@ -303,9 +234,9 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseClient
         .from('profiles')
-        .update(updateData)
+        .update({ max_instances: maxInstances })
         .eq('id', userId);
 
       if (updateError) {
@@ -321,7 +252,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Deletar sub-usuário
     if (req.method === 'DELETE' && path === '/delete') {
       const { userId } = await req.json();
 
@@ -332,8 +262,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Verificar se é sub-usuário
-      const { data: subUser, error: subUserError } = await supabase
+      const { data: subUser, error: subUserError } = await supabaseClient
         .from('profiles')
         .select('id')
         .eq('id', userId)
@@ -347,7 +276,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
+      const { error: deleteError } = await supabaseClient.auth.admin.deleteUser(userId);
       if (deleteError) {
         return new Response(
           JSON.stringify({ error: deleteError.message }),
@@ -357,7 +286,7 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 360, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
