@@ -17,15 +17,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    });
-
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    
     const authHeader = req.headers.get('Authorization');
+    console.log('Auth header:', authHeader ? 'present' : 'missing');
+    
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
@@ -34,7 +30,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    console.log('Token length:', token.length);
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    });
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    console.log('User:', user ? user.id : 'null', 'Error:', userError?.message || 'none');
 
     if (userError || !user) {
       return new Response(
@@ -50,6 +55,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (profileError || !currentProfile) {
+      console.log('Profile error:', profileError?.message);
       return new Response(
         JSON.stringify({ error: 'Profile not found', details: profileError?.message }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -65,6 +71,7 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const path = url.pathname.split('/client-sub-users')[1] || '';
+    console.log('Path:', path, 'Method:', req.method);
 
     if (req.method === 'GET' && path === '/list') {
       const { data: subUsers, error } = await supabaseClient
@@ -110,6 +117,8 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
       const { data: parentProfile } = await supabaseClient
         .from('profiles')
         .select('max_instances')
@@ -151,7 +160,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUser } = await supabaseClient.auth.admin.listUsers();
+      const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
       const userExists = existingUser?.users?.some(u => u.email === email);
 
       if (userExists) {
@@ -161,7 +170,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
@@ -174,7 +183,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { error: profileError } = await supabaseClient
+      const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .insert({
           id: authData.user.id,
@@ -185,7 +194,7 @@ Deno.serve(async (req: Request) => {
         });
 
       if (profileError) {
-        await supabaseClient.auth.admin.deleteUser(authData.user.id);
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return new Response(
           JSON.stringify({ error: 'Erro ao criar perfil do usuário' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -222,8 +231,10 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
       if (password && password.trim() !== '') {
-        const { error: updateError } = await supabaseClient.auth.admin.updateUserById(userId, {
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
           password,
         });
         if (updateError) {
@@ -234,7 +245,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const { error: updateError } = await supabaseClient
+      const { error: updateError } = await supabaseAdmin
         .from('profiles')
         .update({ max_instances: maxInstances })
         .eq('id', userId);
@@ -276,7 +287,8 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { error: deleteError } = await supabaseClient.auth.admin.deleteUser(userId);
+      const supabaseAdmin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
       if (deleteError) {
         return new Response(
           JSON.stringify({ error: deleteError.message }),
@@ -286,7 +298,7 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true }),
-        { status: 360, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -295,6 +307,7 @@ Deno.serve(async (req: Request) => {
       { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
+    console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
