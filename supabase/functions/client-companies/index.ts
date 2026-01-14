@@ -331,7 +331,12 @@ async function handleAddUserToCompany(supabaseClient: any, userId: string, body:
     );
   }
 
-  const { data: company, error: companyError } = await supabaseClient
+  const supabaseAdmin = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
+
+  const { data: company, error: companyError } = await supabaseAdmin
     .from('companies')
     .select('*')
     .eq('id', companyId)
@@ -340,15 +345,10 @@ async function handleAddUserToCompany(supabaseClient: any, userId: string, body:
 
   if (companyError || !company) {
     return new Response(
-      JSON.stringify({ error: 'Empresa não encontrada ou você não tem permissão' }),
+      JSON.stringify({ error: `Empresa não encontrada ou você não tem permissão: ${companyError?.message || 'empresa não existe'}` }),
       { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
 
   const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
     email,
@@ -365,7 +365,7 @@ async function handleAddUserToCompany(supabaseClient: any, userId: string, body:
 
   const newUserId = authData.user.id;
 
-  const { error: profileError } = await supabaseClient
+  const { error: profileError } = await supabaseAdmin
     .from('profiles')
     .update({
       role: 'client',
@@ -378,7 +378,7 @@ async function handleAddUserToCompany(supabaseClient: any, userId: string, body:
   if (profileError) {
     await supabaseAdmin.auth.admin.deleteUser(newUserId);
     return new Response(
-      JSON.stringify({ error: 'Erro ao configurar perfil do usuário' }),
+      JSON.stringify({ error: `Erro ao configurar perfil do usuário: ${profileError.message}` }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
