@@ -16,6 +16,10 @@ export default function ClientSubUsersTab() {
   const [companyFormData, setCompanyFormData] = useState({
     name: '',
     maxInstances: 1,
+    createUser: false,
+    userEmail: '',
+    userPassword: '',
+    userMaxInstances: 1,
   });
   const [userFormData, setUserFormData] = useState({
     email: '',
@@ -50,14 +54,42 @@ export default function ClientSubUsersTab() {
 
   async function handleCreateCompany() {
     try {
-      await clientCompaniesApi.createCompany(
+      const company = await clientCompaniesApi.createCompany(
         companyFormData.name,
         companyFormData.maxInstances
       );
 
-      alert('Empresa criada com sucesso!');
+      if (companyFormData.createUser) {
+        if (!companyFormData.userEmail.trim() || !companyFormData.userPassword.trim()) {
+          alert('Por favor, preencha email e senha do usuário ou desmarque a opção de criar usuário.');
+          return;
+        }
+
+        try {
+          await clientCompaniesApi.addUserToCompany(
+            company.company.id,
+            companyFormData.userEmail,
+            companyFormData.userPassword,
+            companyFormData.userMaxInstances
+          );
+
+          alert(`Empresa e usuário criados com sucesso!\n\nUsuário:\nEmail: ${companyFormData.userEmail}\nSenha: ${companyFormData.userPassword}`);
+        } catch (userError: any) {
+          alert(`Empresa criada, mas erro ao criar usuário: ${userError.message}`);
+        }
+      } else {
+        alert('Empresa criada com sucesso!');
+      }
+
       setShowCompanyModal(false);
-      setCompanyFormData({ name: '', maxInstances: 1 });
+      setCompanyFormData({
+        name: '',
+        maxInstances: 1,
+        createUser: false,
+        userEmail: '',
+        userPassword: '',
+        userMaxInstances: 1
+      });
       loadCompanies();
     } catch (error: any) {
       alert(error.message || 'Erro ao criar empresa');
@@ -157,13 +189,27 @@ export default function ClientSubUsersTab() {
 
   function openCreateCompanyModal() {
     setEditingCompany(null);
-    setCompanyFormData({ name: '', maxInstances: 1 });
+    setCompanyFormData({
+      name: '',
+      maxInstances: 1,
+      createUser: false,
+      userEmail: '',
+      userPassword: '',
+      userMaxInstances: 1
+    });
     setShowCompanyModal(true);
   }
 
   function openEditCompanyModal(company: Company) {
     setEditingCompany(company);
-    setCompanyFormData({ name: company.name, maxInstances: company.max_instances });
+    setCompanyFormData({
+      name: company.name,
+      maxInstances: company.max_instances,
+      createUser: false,
+      userEmail: '',
+      userPassword: '',
+      userMaxInstances: 1
+    });
     setShowCompanyModal(true);
   }
 
@@ -585,6 +631,83 @@ export default function ClientSubUsersTab() {
                   </p>
                 )}
               </div>
+
+              {!editingCompany && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                    <div>
+                      <p className="font-medium text-gray-900">Criar Primeiro Usuário</p>
+                      <p className="text-sm text-gray-500">
+                        Crie um usuário junto com a empresa
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={companyFormData.createUser}
+                        onChange={(e) =>
+                          setCompanyFormData({ ...companyFormData, createUser: e.target.checked })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                    </label>
+                  </div>
+
+                  {companyFormData.createUser && (
+                    <div className="space-y-3 pl-4 border-l-2 border-blue-200 bg-blue-50/30 p-4 rounded-lg">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Email do Usuário
+                        </label>
+                        <input
+                          type="email"
+                          value={companyFormData.userEmail}
+                          onChange={(e) =>
+                            setCompanyFormData({ ...companyFormData, userEmail: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="usuario@email.com"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Senha do Usuário
+                        </label>
+                        <input
+                          type="text"
+                          value={companyFormData.userPassword}
+                          onChange={(e) =>
+                            setCompanyFormData({ ...companyFormData, userPassword: e.target.value })
+                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Senha do usuário"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Máximo de Instâncias do Usuário
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max={companyFormData.maxInstances}
+                          value={companyFormData.userMaxInstances}
+                          onChange={(e) =>
+                            setCompanyFormData({ ...companyFormData, userMaxInstances: parseInt(e.target.value) || 1 })
+                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Máximo: {companyFormData.maxInstances} instâncias
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
