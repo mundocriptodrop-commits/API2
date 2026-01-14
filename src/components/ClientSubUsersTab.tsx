@@ -13,6 +13,7 @@ export default function ClientSubUsersTab() {
     email: '',
     password: '',
     maxInstances: 1,
+    companyName: '',
   });
   const [configureChatEnabled, setConfigureChatEnabled] = useState(false);
   const [chatConfig, setChatConfig] = useState({
@@ -63,12 +64,13 @@ export default function ClientSubUsersTab() {
         formData.email,
         formData.password,
         formData.maxInstances,
+        formData.companyName,
         chatConfigData
       );
 
       alert(`Sub-usuário criado com sucesso!\n\nEmail: ${formData.email}\nSenha: ${formData.password}`);
       setShowModal(false);
-      setFormData({ email: '', password: '', maxInstances: 1 });
+      setFormData({ email: '', password: '', maxInstances: 1, companyName: '' });
       setConfigureChatEnabled(false);
       setChatConfig({ chat_url: '', chat_api_key: '', chat_account_id: '' });
       loadSubUsers();
@@ -115,7 +117,7 @@ export default function ClientSubUsersTab() {
 
   function openCreateModal() {
     setEditingUser(null);
-    setFormData({ email: '', password: '', maxInstances: 1 });
+    setFormData({ email: '', password: '', maxInstances: 1, companyName: '' });
     setConfigureChatEnabled(false);
     setChatConfig({ chat_url: '', chat_api_key: '', chat_account_id: '' });
     setShowModal(true);
@@ -277,6 +279,19 @@ export default function ClientSubUsersTab() {
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Senha do usuário"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nome da Empresa
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.companyName}
+                      onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nome da empresa do sub-usuário"
                     />
                   </div>
                 </>

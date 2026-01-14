@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
 
     // CREATE SUB-USER
     if (req.method === 'POST' && path === '/create') {
-      const { email, password, maxInstances, chatConfig } = await req.json();
+      const { email, password, maxInstances, companyName, chatConfig } = await req.json();
 
       if (!email || !password || !maxInstances) {
         return new Response(
@@ -161,6 +161,7 @@ Deno.serve(async (req: Request) => {
         role: 'client',
         max_instances: maxInstances,
         parent_user_id: user.id,
+        company_name: companyName || null,
       };
 
       if (chatConfig) {

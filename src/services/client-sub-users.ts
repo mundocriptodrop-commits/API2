@@ -35,19 +35,21 @@ export const clientSubUsersApi = {
   },
 
   async createSubUser(
-    email: string, 
-    password: string, 
+    email: string,
+    password: string,
     maxInstances: number,
+    companyName: string,
     chatConfig?: { chat_url: string; chat_api_key: string; chat_account_id: number } | null
   ) {
     const headers = await getAuthHeaders();
     const response = await fetch(`${CLIENT_SUB_USERS_FUNCTION_URL}/create`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ 
-        email, 
-        password, 
+      body: JSON.stringify({
+        email,
+        password,
         maxInstances,
+        companyName,
         chatConfig: chatConfig || null,
       }),
     });
