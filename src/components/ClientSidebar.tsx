@@ -17,7 +17,7 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
   }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'instances', label: isSubUser ? 'Minhas Instâncias' : 'Instâncias', icon: MessageCircle },
-    { id: 'sub-users', label: 'Sub-usuários', icon: Users, restricted: true },
+    { id: 'sub-users', label: 'Empresa', icon: Users, restricted: true },
     { id: 'activity', label: 'Atividades', icon: Activity, restricted: true },
     { id: 'subscription', label: 'Planos', icon: Package, restricted: true },
     { id: 'api', label: 'Documentação API', icon: Code },
@@ -77,7 +77,7 @@ export default function ClientSidebar({ activeTab, onTabChange }: ClientSidebarP
                       <span className="text-[11px] uppercase tracking-[0.3em]">
                         {tab.id === 'dashboard' && 'Visão'}
                         {tab.id === 'instances' && 'Gestão'}
-                        {tab.id === 'sub-users' && 'Usuários'}
+                        {tab.id === 'sub-users' && 'Gestão'}
                         {tab.id === 'activity' && 'Monitor'}
                         {tab.id === 'subscription' && 'Assinaturas'}
                         {tab.id === 'api' && 'Docs'}

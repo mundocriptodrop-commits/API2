@@ -1797,13 +1797,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
-          {/* Filtros de visualização (Todas, Minhas, Sub-usuários) */}
+          {/* Filtros de visualização (Todas, Minhas, Empresa) */}
           {subUsers.length > 0 && (
             <>
               {[
                 { label: 'Todas', value: 'all' as const, count: summary.total },
                 { label: 'Minhas', value: 'mine' as const, count: summary.myInstances },
-                { label: 'Sub-usuários', value: 'sub-users' as const, count: summary.subUserInstances },
+                { label: 'Empresa', value: 'sub-users' as const, count: summary.subUserInstances },
               ].map((filter) => (
                 <button
                   key={filter.value}
@@ -1905,7 +1905,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     </div>
                     {instance.user_id !== user?.id && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
-                        {(instance as any).user?.email || 'Sub-usuário'}
+                        {(instance as any).user?.email || 'Usuário'}
                       </span>
                     )}
                     {instance.user_id === user?.id && (
