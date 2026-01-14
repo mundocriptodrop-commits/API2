@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function loadProfile(userId: string) {
+  async function loadProfile(userId: string, retryCount = 0) {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -59,17 +59,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        if (retryCount < 3) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+          return loadProfile(userId, retryCount + 1);
+        }
+        throw error;
+      }
 
       if (!data) {
+        await supabase.auth.signOut();
         setUser(null);
         setProfile(null);
       } else {
         setProfile(data);
       }
     } catch (error) {
-      setUser(null);
-      setProfile(null);
+      console.error('Error loading profile:', error);
+      if (retryCount >= 3) {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+      }
     } finally {
       setLoading(false);
     }
