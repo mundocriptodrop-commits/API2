@@ -126,7 +126,7 @@ Deno.serve(async (req: Request) => {
       if (available !== -1 && maxInstances > available) {
         return new Response(
           JSON.stringify({ 
-            error: `Voc\u00ea s\u00f3 tem ${available} inst\u00e2ncias dispon\u00edveis. Voc\u00ea j\u00e1 est\u00e1 usando ${totalUsed} de ${parentProfile.max_instances}.` 
+            error: `Você só tem ${available} instâncias disponíveis. Você já está usando ${totalUsed} de ${parentProfile.max_instances}.` 
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -137,7 +137,7 @@ Deno.serve(async (req: Request) => {
 
       if (userExists) {
         return new Response(
-          JSON.stringify({ error: 'Este email j\u00e1 est\u00e1 cadastrado no sistema' }),
+          JSON.stringify({ error: 'Este email já está cadastrado no sistema' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -150,9 +150,34 @@ Deno.serve(async (req: Request) => {
 
       if (authError) {
         return new Response(
-          JSON.stringify({ error: authError.message || 'Erro ao criar usu\u00e1rio' }),
+          JSON.stringify({ error: authError.message || 'Erro ao criar usuário' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      let companyId = null;
+
+      if (companyName && companyName.trim() !== '') {
+        const { data: newCompany, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .insert({
+            name: companyName.trim(),
+            owner_id: authData.user.id,
+            max_instances: maxInstances,
+            is_active: true,
+          })
+          .select('id')
+          .single();
+
+        if (companyError) {
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+          return new Response(
+            JSON.stringify({ error: 'Erro ao criar empresa: ' + companyError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        companyId = newCompany.id;
       }
 
       const profileData: any = {
@@ -161,7 +186,7 @@ Deno.serve(async (req: Request) => {
         role: 'client',
         max_instances: maxInstances,
         parent_user_id: user.id,
-        company_name: companyName || null,
+        company_id: companyId,
       };
 
       if (chatConfig) {
@@ -175,9 +200,12 @@ Deno.serve(async (req: Request) => {
         .insert(profileData);
 
       if (profileError) {
+        if (companyId) {
+          await supabaseAdmin.from('companies').delete().eq('id', companyId);
+        }
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return new Response(
-          JSON.stringify({ error: 'Erro ao criar perfil do usu\u00e1rio' }),
+          JSON.stringify({ error: 'Erro ao criar perfil do usuário: ' + profileError.message }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -208,7 +236,7 @@ Deno.serve(async (req: Request) => {
 
       if (!subUser) {
         return new Response(
-          JSON.stringify({ error: 'Sub-usu\u00e1rio n\u00e3o encontrado' }),
+          JSON.stringify({ error: 'Sub-usuário não encontrado' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -265,7 +293,7 @@ Deno.serve(async (req: Request) => {
 
       if (!subUser) {
         return new Response(
-          JSON.stringify({ error: 'Sub-usu\u00e1rio n\u00e3o encontrado' }),
+          JSON.stringify({ error: 'Sub-usuário não encontrado' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
