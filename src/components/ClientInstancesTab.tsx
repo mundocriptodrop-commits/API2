@@ -200,7 +200,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         throw new Error('Clipboard API não suportada');
       }
     } catch (error) {
-      console.error('Erro ao copiar token:', error);
       showToast('Não foi possível copiar o token', 'error');
     }
   };
@@ -247,7 +246,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           setChatEnabled(false);
         }
       } catch (error) {
-        console.error('Error loading selected user chat config:', error);
         setSelectedUserChatConfig(null);
         setChatEnabled(false);
       }
@@ -270,7 +268,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       }
       return Promise.resolve();
     } catch (error) {
-      console.error('Error loading sub-users:', error);
       return Promise.resolve();
     }
   }
@@ -287,17 +284,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
     // Verificar se a resposta é válida
     if (!statusResponse || (typeof statusResponse !== 'object')) {
-      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ Resposta inválida - mantendo status atual`);
       return null;
     }
-
-    // LOG DETALHADO: Ver o que a API está retornando
-    console.log(`[STATUS_CHECK:${instanceName}] 🔍 Resposta completa da API:`, {
-      instanceStatus: instanceData?.status,
-      instanceData: instanceData,
-      statusData: statusData,
-      fullResponse: statusResponse
-    });
 
     // PRIORIDADE 1: Usar o campo status diretamente da API se disponível
     // A API retorna: "disconnected", "connecting", "connected"
@@ -305,27 +293,21 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     if (apiStatus && typeof apiStatus === 'string') {
       const normalizedStatus = apiStatus.toLowerCase();
       if (normalizedStatus === 'connected' || normalizedStatus === 'connecting' || normalizedStatus === 'disconnected') {
-        console.log(`[STATUS_CHECK:${instanceName}] 📡 Status DIRETO da API: ${normalizedStatus}`);
         return normalizedStatus as 'connected' | 'connecting' | 'disconnected';
-      } else {
-        console.log(`[STATUS_CHECK:${instanceName}] ⚠️ Status da API não reconhecido: "${apiStatus}"`);
       }
-    } else {
-      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ Campo instance.status não encontrado ou inválido na resposta`);
     }
 
     // PRIORIDADE 2: Verificar QR code ou pairing code - se houver, está "connecting"
-    const hasQrCode = (instanceData?.qrcode && String(instanceData.qrcode).trim().length > 0) || 
+    const hasQrCode = (instanceData?.qrcode && String(instanceData.qrcode).trim().length > 0) ||
                      (statusResponse?.qrCode && String(statusResponse.qrCode).trim().length > 0) ||
                      (statusData?.qrcode && String(statusData.qrcode).trim().length > 0) ||
                      (statusData?.qrCode && String(statusData.qrCode).trim().length > 0);
-    const hasPairingCode = (instanceData?.paircode && String(instanceData.paircode).trim().length > 0) || 
+    const hasPairingCode = (instanceData?.paircode && String(instanceData.paircode).trim().length > 0) ||
                           (statusResponse?.pairingCode && String(statusResponse.pairingCode).trim().length > 0) ||
                           (statusData?.paircode && String(statusData.paircode).trim().length > 0) ||
                           (statusData?.pairingCode && String(statusData.pairingCode).trim().length > 0);
-    
+
     if (hasQrCode || hasPairingCode) {
-      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ EM CONEXÃO - QR/Pairing code presente`);
       return 'connecting';
     }
 
@@ -334,26 +316,23 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     const hasLoggedInTrue = statusData?.loggedIn === true;
     const hasConnectedTrue = statusData?.connected === true;
     const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
-    
+
     // CRÍTICO: Só marcar como "connected" se TODOS os indicadores estiverem presentes
     // Não assumir "connected" apenas com um indicador parcial
     if (hasLoggedInTrue && hasConnectedTrue && hasJid) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Todos indicadores positivos (loggedIn + connected + JID)`);
       return 'connected';
     }
 
     // PRIORIDADE 4: Verificar indicadores de desconexão
     const hasLoggedInFalse = statusData?.loggedIn === false;
     const hasConnectedFalse = statusData?.connected === false;
-    
+
     if (hasLoggedInFalse && hasConnectedFalse) {
-      console.log(`[STATUS_CHECK:${instanceName}] ❌ DESCONECTADO - Indicadores negativos (loggedIn=false + connected=false)`);
       return 'disconnected';
     }
 
     // Se não conseguir determinar, retornar null para manter status atual
     // NÃO assumir "connected" por padrão
-    console.log(`[STATUS_CHECK:${instanceName}] ⚠️ INDETERMINADO - Mantendo status atual (não assumir connected)`);
     return null;
   }
 
@@ -377,9 +356,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     // 4. E ter estrutura de resposta válida (statusData e instanceData existem)
     
     // Só retornar false se TODAS as condições forem verdadeiras
-    if (hasLoggedInFalse && 
-        hasConnectedFalse && 
-        !hasQrCode && 
+    if (hasLoggedInFalse &&
+        hasConnectedFalse &&
+        !hasQrCode &&
         !hasPairingCode &&
         statusData !== undefined && // Garantir que statusData existe
         instanceData !== undefined && // Garantir que instanceData existe
@@ -387,15 +366,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         !hasOwner && // Garantir que não tem owner
         !hasPhoneNumber && // Garantir que não tem phone_number
         !hasProfileName) { // Garantir que não tem profileName
-      
-      console.log(`[STATUS_CHECK:${instanceName}] ❌ DESCONECTADO - Confirmação absoluta (todos indicadores negativos)`);
+
       return false;
     }
-    
+
     // IMPORTANTE: Se não temos certeza absoluta, retornamos null
     // Isso faz com que o status atual seja mantido (especialmente se estiver como "connected")
     // POLÍTICA: Em caso de dúvida, manter como conectado
-    console.log(`[STATUS_CHECK:${instanceName}] ⚠️ INDETERMINADO - Mantendo status atual (política conservadora)`);
     return null;
   }
 
@@ -435,16 +412,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             const apiStatus = getStatusFromApi(status, instance.name);
             const statusData = (status as any).status;
             const phoneNumber = extractPhoneNumber(status);
-            
-            console.log(`[SYNC:${instance.name}] Status da API: ${apiStatus}, Status atual no banco: ${instance.status}`);
-
             // PRIORIDADE: Usar o status diretamente da API se disponível
             // IMPORTANTE: Só atualizar se apiStatus não for null (se for null, manter status atual)
             if (apiStatus && apiStatus !== null) {
               // Se o status da API é diferente do status no banco, atualizar
               if (apiStatus !== instance.status) {
-                console.log(`[SYNC] Instância ${instance.name}: API diz "${apiStatus}", banco tem "${instance.status}" - ATUALIZANDO`);
-                
                 const updates: any = {
                   status: apiStatus,
                 };
@@ -547,9 +519,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             // Fallback: Se não conseguiu determinar status da API (apiStatus === null)
             // NÃO fazer nada - manter status atual do banco
             // Isso evita marcar como "connected" incorretamente
-            console.log(`[SYNC:${instance.name}] ⚠️ Status da API é null/indeterminado - MANTENDO status atual do banco: ${instance.status}`);
-            console.log(`[SYNC:${instance.name}] ⚠️ NÃO atualizando status - aguardando resposta clara da API`);
-            
             // Se o status atual no banco é "connected" mas a API não confirma, 
             // verificar se realmente está desconectado antes de mudar
             if (instance.status === 'connected') {
@@ -563,7 +532,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               const hasNoJid = !statusData?.jid || !statusData.jid.includes('@');
               
               if (hasLoggedInFalse && hasConnectedFalse && hasNoJid) {
-                console.log(`[SYNC:${instance.name}] ⚠️ API confirma desconexão (loggedIn=false, connected=false, sem JID) - atualizando para disconnected`);
                 await supabase
                   .from('whatsapp_instances')
                   .update({
@@ -574,7 +542,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   .eq('id', instance.id);
                 loadInstances();
               } else {
-                console.log(`[SYNC:${instance.name}] ✅ Mantendo como connected (API não confirma desconexão explícita)`);
               }
             }
             
@@ -583,7 +550,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           } catch (error: any) {
             // Tratar erros específicos da API
             if (error?.status === 401) {
-              console.warn(`[SYNC:${instance.name}] ⚠️ Token inválido ou expirado (401) - pulando verificação`);
               // Marcar como desconectado se o token é inválido
               if (instance.status === 'connected' || instance.status === 'connecting') {
                 await supabase
@@ -594,25 +560,20 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     pairing_code: null,
                   })
                   .eq('id', instance.id);
-                console.log(`[SYNC:${instance.name}] ⚠️ Atualizado para disconnected devido a token inválido`);
               }
               continue; // Pular esta instância
             } else if (error?.status === 404) {
-              console.warn(`[SYNC:${instance.name}] ⚠️ Instância não encontrada na API (404) - pulando verificação`);
               continue; // Pular esta instância
             } else if (error?.status === 500) {
-              console.error(`[SYNC:${instance.name}] ❌ Erro interno do servidor (500) - mantendo status atual`);
               // Não atualizar status em caso de erro 500 - pode ser temporário
               continue; // Pular esta instância
             } else {
               // Outros erros - não alterar status
-              console.warn(`[SYNC:${instance.name}] ⚠️ Erro ao verificar instância na API (mantendo status atual):`, error?.message || error);
               continue; // Pular esta instância
             }
           }
         }
       } catch (error) {
-        console.error('[SYNC] Erro geral na sincronização:', error);
       }
     }, 30000); // Verificar a cada 30 segundos
 
@@ -712,8 +673,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               // PROTEÇÃO EXTRA: Antes de marcar como desconectado, verificar novamente
               // Se a instância está conectada no banco, fazer uma segunda verificação
               if (inst.status === 'connected') {
-                console.log(`[LOAD] ⚠️ API diz desconectado mas instância ${inst.name} está conectada no banco - verificando novamente...`);
-                
                 // Segunda verificação após pequeno delay
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 try {
@@ -729,13 +688,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                     });
                   } else if (secondConnectionStatus === true) {
                     // Na segunda verificação está conectado - manter como conectado
-                    console.log(`[LOAD] ✅ Segunda verificação confirma que ${inst.name} está conectada`);
                     // Não adicionar à lista de atualizações - manter como conectado
                   }
                   // Se secondConnectionStatus === null, manter status atual (conectado)
                 } catch (secondError) {
                   // Se segunda verificação falhar, manter status atual (conectado)
-                  console.warn(`[LOAD] Segunda verificação falhou para ${inst.name} - mantendo como conectado`);
                 }
               } else {
                 // Se já está desconectado no banco e API confirma, pode atualizar
@@ -750,7 +707,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           } catch (error) {
             // Se houver erro ao consultar a API, manter status atual do banco
             // NUNCA marcar como desconectado por erro na API
-            console.warn(`[LOAD] Erro ao verificar status da instância ${inst.name} na API (mantendo status atual):`, error);
           }
         }
 
@@ -805,7 +761,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         setInstances(data || []);
       }
     } catch (error) {
-      console.error('Error loading instances:', error);
     } finally {
       setLoading(false);
     }
@@ -820,7 +775,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
     // Verifica se já está sendo configurado no lock local (primeira verificação rápida)
     if (chatwootConfiguring.current.has(instance.id)) {
-      console.log(`[CHATWOOT] Integração já está sendo configurada para instância ${instance.name} (lock local)`);
       return;
     }
     
@@ -834,12 +788,10 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         .single();
       
       if (currentInstance?.admin_field_02 === 'chatwoot_configured') {
-        console.log(`[CHATWOOT] Integração já configurada para instância ${instance.name} (verificado no banco)`);
         return;
       }
       
       if (currentInstance?.admin_field_02 === 'chatwoot_configuring') {
-        console.log(`[CHATWOOT] Integração já está sendo configurada para instância ${instance.name} (verificado no banco)`);
         return;
       }
       
@@ -861,18 +813,15 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         
         if (recheckInstance?.admin_field_02 === 'chatwoot_configuring' || 
             recheckInstance?.admin_field_02 === 'chatwoot_configured') {
-          console.log(`[CHATWOOT] Integração já está sendo configurada/configurada por outra requisição`);
           return;
         }
         
         // Se não está configurando/configurado, pode ser erro de rede - tentar continuar
-        console.warn(`[CHATWOOT] Erro ao marcar como "configurando" no banco, mas continuando:`, updateError);
       }
       
       // Marca no lock local APÓS confirmar no banco
       chatwootConfiguring.current.add(instance.id);
     } catch (error) {
-      console.warn(`[CHATWOOT] Erro ao verificar/marcar no banco:`, error);
       // Se falhar a verificação no banco, verifica o lock local
       if (chatwootConfiguring.current.has(instance.id)) {
         return;
@@ -888,20 +837,15 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         .maybeSingle();
 
       if (!profileData?.chat_url || !profileData?.chat_api_key || !profileData?.chat_account_id) {
-        console.log(`[CHATWOOT] Configurações do Chat não encontradas para usuário`);
         return;
       }
 
       const inboxId = parseInt(instance.admin_field_01, 10);
       if (isNaN(inboxId)) {
-        console.error(`[CHATWOOT] Inbox ID inválido: ${instance.admin_field_01}`);
         return;
       }
 
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.evasend.com.br/whatsapp';
-      
-      console.log(`[CHATWOOT] Configurando integração completa via /chatwoot/config para instância ${instance.name}...`);
-      
       const configResponse = await fetch(`${API_BASE_URL}/chatwoot/config`, {
         method: 'PUT',
         headers: {
@@ -922,8 +866,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
       if (configResponse.ok) {
         const configData = await configResponse.json();
-        console.log(`[CHATWOOT] ✅ Integração configurada com sucesso para instância ${instance.name}:`, configData);
-        
         // Marcar como configurado no banco
         await supabase
           .from('whatsapp_instances')
@@ -935,8 +877,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         
         // Verifica se o webhook foi configurado
         if (configData.webhook_url || configData.channel_webhook_updated || configData.webhook_updated_in_chatwoot) {
-          console.log(`[CHATWOOT] ✅ Webhook configurado automaticamente via /chatwoot/config`);
-          
           // Buscar o nome da inbox do Chatwoot
           // A inbox é criada com o nome da instância, mas vamos buscar da resposta para garantir
           let inboxName = instance.name; // Fallback para o nome da instância
@@ -971,7 +911,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               }
             }
           } catch (error) {
-            console.warn(`[CHATWOOT] Não foi possível buscar o nome da inbox, usando nome da instância:`, error);
             // Usa o nome da instância como fallback (que é o mesmo usado para criar a inbox)
           }
           
@@ -985,7 +924,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         } catch {
           configErrorData = { error: configErrorText, status: configResponse.status };
         }
-        console.error(`[CHATWOOT] Erro ao configurar integração para instância ${instance.name}:`, configErrorData);
         // Não mostrar toast de erro aqui para não incomodar o usuário
         
         // Remover do lock mesmo em caso de erro para permitir nova tentativa
@@ -998,8 +936,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           .eq('id', instance.id);
       }
     } catch (error: any) {
-      console.error(`[CHATWOOT] Erro ao chamar /chatwoot/config para instância ${instance.name}:`, error);
-      
       // Remover do lock mesmo em caso de erro
       chatwootConfiguring.current.delete(instance.id);
       
@@ -1010,19 +946,11 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           .update({ admin_field_02: null })
           .eq('id', instance.id);
       } catch (dbError) {
-        console.warn(`[CHATWOOT] Erro ao remover flag de "configurando":`, dbError);
       }
     }
   }
 
   async function handleCreateInstance() {
-    console.log('[CREATE_INSTANCE] Iniciando criação de instância...', {
-      instanceName,
-      chatEnabled,
-      hasSelectedConfig: !!selectedUserChatConfig,
-      hasManualConfig: !!(manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId)
-    });
-
     if (!instanceName.trim()) {
       showToast('Por favor, insira um nome para a instância', 'warning');
       return;
@@ -1035,20 +963,7 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           ? manualChatConfig
           : null
       );
-
-      console.log('[CREATE_INSTANCE] Validação do chat:', {
-        chatEnabled,
-        hasSelectedConfig: !!selectedUserChatConfig,
-        hasManualConfig: !!(manualChatConfig.url && manualChatConfig.apiKey && manualChatConfig.accountId),
-        chatConfigToValidate: chatConfigToValidate ? {
-          hasUrl: !!chatConfigToValidate.url?.trim(),
-          hasApiKey: !!chatConfigToValidate.apiKey?.trim(),
-          hasAccountId: !!chatConfigToValidate.accountId?.trim()
-        } : null
-      });
-
       if (!chatConfigToValidate) {
-        console.warn('[CREATE_INSTANCE] Chat ativado mas sem configurações');
         showToast('Preencha todas as configurações do Chat (URL, API Key e Account ID) ou desative a integração', 'warning');
         return;
       }
@@ -1057,7 +972,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       const accountIdStr = String(chatConfigToValidate.accountId || '').trim();
       
       if (!chatConfigToValidate.url?.trim() || !chatConfigToValidate.apiKey?.trim() || !accountIdStr) {
-        console.warn('[CREATE_INSTANCE] Chat ativado mas configurações incompletas');
         showToast('Preencha todas as configurações do Chat corretamente', 'warning');
         return;
       }
@@ -1090,7 +1004,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           }
         } catch (error) {
           // Se falhar, usar o valor da resposta da criação
-          console.warn('Erro ao verificar status inicial da instância:', error);
           initialStatus = response.connected ? 'connected' : 'disconnected';
         }
 
@@ -1144,16 +1057,12 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               if (inboxResponse.ok) {
                 const inboxData = await inboxResponse.json();
                 inboxId = inboxData.inbox_id;
-                console.log('[CHATWOOT] Inbox criada com sucesso:', inboxData);
-                
                 // Atualizar a instância com o inbox_id
                 // A configuração completa via /chatwoot/config será feita após a conexão
                 await supabase
                   .from('whatsapp_instances')
                   .update({ admin_field_01: inboxId.toString() })
                   .eq('id', newInstanceData.id);
-                
-                console.log('[CHATWOOT] Inbox criada. A integração será configurada automaticamente após a conexão da instância.');
               } else {
                 let errorData;
                 try {
@@ -1162,22 +1071,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   const errorText = await inboxResponse.text();
                   errorData = { error: errorText, status: inboxResponse.status };
                 }
-                console.error('[CHATWOOT] Erro ao criar inbox:', errorData);
-                console.error('[CHATWOOT] Status:', inboxResponse.status);
-                console.error('[CHATWOOT] Response headers:', Object.fromEntries(inboxResponse.headers.entries()));
                 // Não falhar a criação da instância se a inbox falhar
                 const errorMessage = errorData.details?.message || errorData.error || 'Erro desconhecido';
                 showToast(`Instância criada, mas não foi possível criar a inbox no Chat: ${errorMessage}`, 'warning');
               }
             } catch (chatError: any) {
-              console.error('[CHATWOOT] Erro ao criar inbox:', chatError);
               // Não falhar a criação da instância se a inbox falhar
               showToast('Instância criada, mas não foi possível criar a inbox no Chat. Verifique as configurações.', 'warning');
             }
           } else {
             // Já tem inbox_id, usar o existente
             inboxId = parseInt(newInstanceData.admin_field_01, 10);
-            console.log(`[CHATWOOT] Instância já tem inbox_id: ${inboxId}, não criando duplicado.`);
           }
         } else if (chatEnabled && !chatConfigToUse) {
           showToast('Instância criada, mas não foi possível criar a inbox. Preencha todas as configurações do Chat.', 'warning');
@@ -1196,13 +1100,10 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                   chat_account_id: manualChatConfig.accountId,
                 })
                 .eq('id', userIdToSave);
-              
-              console.log('[CHAT_CONFIG] Configurações salvas no perfil do usuário');
               // Atualizar o estado para refletir as configurações salvas
               setSelectedUserChatConfig(manualChatConfig);
             }
           } catch (error) {
-            console.error('[CHAT_CONFIG] Erro ao salvar configurações no perfil:', error);
             // Não falhar a criação se não conseguir salvar no perfil
           }
         }
@@ -1241,13 +1142,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         throw new Error('API não retornou token de instância');
       }
     } catch (error: any) {
-      console.error('[CREATE_INSTANCE] Erro ao criar instância:', error);
-      console.error('[CREATE_INSTANCE] Detalhes do erro:', {
-        message: error?.message,
-        stack: error?.stack,
-        response: error?.response,
-        data: error?.data
-      });
       showToast(error?.message || 'Erro ao criar instância', 'error');
     } finally {
       setCreating(false);
@@ -1274,7 +1168,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         selectedInstance.user_id = connectToUserId;
         showToast(`Instância transferida para ${subUsers.find(u => u.id === connectToUserId)?.email || 'subconta'}`, 'success');
       } catch (error) {
-        console.error('Error transferring instance:', error);
         showToast('Erro ao transferir instância', 'error');
         return;
       }
@@ -1288,9 +1181,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         selectedInstance.instance_token,
         phoneNumber || undefined
       );
-
-      console.log('[CONNECT] Resposta da API connectInstance:', response);
-
       await supabase
         .from('whatsapp_instances')
         .update({
@@ -1304,10 +1194,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       // Verificar QR code na resposta inicial - múltiplos formatos possíveis
       const qr = response.qrCode || response.qr || (response as any).qrcode || (response as any).instance?.qrcode || null;
       const code = response.pairingCode || response.code || (response as any).paircode || (response as any).instance?.paircode || null;
-
-      console.log('[CONNECT] QR code encontrado na resposta inicial:', qr ? 'Sim' : 'Não');
-      console.log('[CONNECT] Pairing code encontrado na resposta inicial:', code ? 'Sim' : 'Não');
-
       if (qr) {
         setQrCode(qr);
         setPairingCode('');
@@ -1316,7 +1202,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           .from('whatsapp_instances')
           .update({ qr_code: qr })
           .eq('id', selectedInstance.id);
-        console.log('[CONNECT] QR code definido do estado');
       } else if (code) {
         setPairingCode(code);
         setQrCode('');
@@ -1325,14 +1210,10 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           .from('whatsapp_instances')
           .update({ pairing_code: code })
           .eq('id', selectedInstance.id);
-        console.log('[CONNECT] Pairing code definido do estado');
       } else {
         // Se não veio na resposta inicial, buscar imediatamente no status
-        console.log('[CONNECT] QR code não veio na resposta inicial, buscando no status...');
         try {
           const status = await whatsappApi.getInstanceStatus(selectedInstance.instance_token);
-          console.log('[CONNECT] Resposta do getInstanceStatus:', status);
-          
           const instanceData = (status as any).instance;
           const statusData = (status as any).status;
           
@@ -1352,10 +1233,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                                 (status as any).pairingCode || 
                                 (status as any).paircode || 
                                 null;
-
-          console.log('[CONNECT] QR code do status:', qrFromStatus ? 'Sim' : 'Não');
-          console.log('[CONNECT] Pairing code do status:', codeFromStatus ? 'Sim' : 'Não');
-
           if (qrFromStatus && qrFromStatus.trim() !== '') {
             setQrCode(qrFromStatus);
             setPairingCode('');
@@ -1364,7 +1241,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               .from('whatsapp_instances')
               .update({ qr_code: qrFromStatus })
               .eq('id', selectedInstance.id);
-            console.log('[CONNECT] QR code definido do status');
           } else if (codeFromStatus && codeFromStatus.trim() !== '') {
             setPairingCode(codeFromStatus);
             setQrCode('');
@@ -1373,12 +1249,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
               .from('whatsapp_instances')
               .update({ pairing_code: codeFromStatus })
               .eq('id', selectedInstance.id);
-            console.log('[CONNECT] Pairing code definido do status');
           } else {
-            console.log('[CONNECT] QR code ainda não disponível, iniciando polling...');
           }
         } catch (statusError) {
-          console.error('[CONNECT] Erro ao buscar status inicial:', statusError);
         }
       }
 
@@ -1416,7 +1289,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       showToast('Instância desconectada! Agora você pode tentar conectar novamente.', 'success');
       loadInstances();
     } catch (error: any) {
-      console.error('Error force disconnecting:', error);
       showToast(error.message || 'Erro ao desconectar instância', 'error');
     }
   }
@@ -1455,7 +1327,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         
         // Se tem QR code ou pairing code, NÃO está conectado ainda - FORÇAR como connecting
         if (qrCodeFromApi && qrCodeFromApi.trim() !== '') {
-          console.log(`[POLLING:${instance.name}] QR code presente - FORÇANDO status para connecting`);
           // SEMPRE atualizar para "connecting" se tem QR code, independente do status atual
           await supabase
             .from('whatsapp_instances')
@@ -1471,7 +1342,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         }
         
         if (pairingCodeFromApi && pairingCodeFromApi.trim() !== '') {
-          console.log(`[POLLING:${instance.name}] Pairing code presente - FORÇANDO status para connecting`);
           // SEMPRE atualizar para "connecting" se tem pairing code, independente do status atual
           await supabase
             .from('whatsapp_instances')
@@ -1493,13 +1363,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         
         // Log para debug
         if (pollCount <= 3 || qrCodeFromApi || pairingCodeFromApi) {
-          console.log(`[POLLING:${instance.name}] Tentativa ${pollCount}:`, {
-            apiStatus,
-            hasQrCode: !!qrCodeFromApi,
-            hasPairingCode: !!pairingCodeFromApi,
-            instanceData: !!instanceData,
-            statusData: !!statusData
-          });
         }
 
         // Usar o status diretamente da API
@@ -1547,7 +1410,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         } else if (apiStatus === 'disconnected') {
           // Se a API diz explicitamente que está desconectado, atualizar para disconnected
           if (instance.status !== 'disconnected') {
-            console.log(`[POLLING:${instance.name}] API diz desconectado - atualizando para disconnected`);
             await supabase
               .from('whatsapp_instances')
               .update({
@@ -1565,7 +1427,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
         // Tratar erros específicos da API
         if (error?.status === 401) {
-          console.warn(`[POLLING:${instance.name}] ⚠️ Token inválido ou expirado (401) - parando polling`);
           clearInterval(interval);
           if (timeoutId) clearTimeout(timeoutId);
 
@@ -1588,7 +1449,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           }
           return;
         } else if (error?.status === 404) {
-          console.warn(`[POLLING:${instance.name}] ⚠️ Instância não encontrada na API (404) - parando polling`);
           clearInterval(interval);
           if (timeoutId) clearTimeout(timeoutId);
 
@@ -1600,10 +1460,8 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           }
           return;
         } else if (error?.status === 500) {
-          console.error(`[POLLING:${instance.name}] ❌ Erro interno do servidor (500) - continuando polling`);
           // Continuar tentando em caso de erro 500 (pode ser temporário)
         } else {
-          console.error(`[POLLING:${instance.name}] ❌ Erro ao verificar status:`, error?.message || error);
           // Continuar tentando em caso de outros erros
         }
       }
@@ -1662,7 +1520,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
         // PROTEÇÃO CRÍTICA: Se já está conectada no banco, NUNCA marcar como desconectado
         if (currentInstance?.status === 'connected') {
-          console.log(`[POLLING] Instância ${instance.name} já está conectada no banco - mantendo como conectada após timeout`);
           setIsConnecting(false);
           setQrCode('');
           setPairingCode('');
@@ -1671,7 +1528,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
 
         // Se status é null (indeterminado), não marcar como desconectado - manter status atual
         if (connectionStatus === null) {
-          console.log(`[POLLING] Instância ${instance.name}: Status indeterminado na API após timeout - mantendo status atual`);
           setIsConnecting(false);
           setQrCode('');
           setPairingCode('');
@@ -1700,12 +1556,10 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
         }
 
         // Se chegou aqui, não temos certeza - não alterar status
-        console.log(`[POLLING] Instância ${instance.name}: Não foi possível determinar status após timeout - mantendo status atual`);
         setIsConnecting(false);
         setQrCode('');
         setPairingCode('');
       } catch (error) {
-        console.error('Erro ao verificar status antes do timeout:', error);
         // Se der erro, manter como está (não marcar como desconectado)
         setIsConnecting(false);
         setQrCode('');
@@ -1737,7 +1591,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           loadInstances();
           showToast('Instância desconectada com sucesso!', 'success');
         } catch (error) {
-          console.error('Error disconnecting instance:', error);
           showToast('Erro ao desconectar instância', 'error');
         }
       },
@@ -1774,7 +1627,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       await loadInstances();
       showToast('Conexão cancelada com sucesso!', 'success');
     } catch (error) {
-      console.error('Error canceling connection:', error);
       showToast('Erro ao cancelar conexão', 'error');
     }
   }
@@ -1813,7 +1665,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             deletingInstances.current.delete(instance.id);
           }, 5000);
         } catch (error) {
-          console.error('Error deleting instance:', error);
           deletingInstances.current.delete(instance.id);
           showToast('Erro ao excluir instância', 'error');
         }
@@ -1838,13 +1689,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     // Buscar configurações do chat se a instância tiver chat habilitado
     if (instance.chat_enabled && instance.admin_field_01) {
       try {
-        console.log('[CHAT_CONFIG] Buscando configurações do chat para instância:', {
-          instanceId: instance.id,
-          userId: instance.user_id,
-          chatEnabled: instance.chat_enabled,
-          inboxId: instance.admin_field_01
-        });
-        
         // Buscar configurações do perfil do usuário dono da instância
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -1853,17 +1697,9 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
           .single();
         
         if (profileError) {
-          console.error('[CHAT_CONFIG] Erro ao buscar perfil:', profileError);
           setChatConfig(null);
           return;
         }
-        
-        console.log('[CHAT_CONFIG] Dados do perfil encontrados:', {
-          hasUrl: !!profileData?.chat_url,
-          hasApiKey: !!profileData?.chat_api_key,
-          hasAccountId: !!profileData?.chat_account_id
-        });
-        
         if (profileData?.chat_url && profileData?.chat_api_key && profileData?.chat_account_id) {
           setChatConfig({
             url: profileData.chat_url,
@@ -1871,34 +1707,17 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
             accountId: profileData.chat_account_id,
             inboxId: instance.admin_field_01,
           });
-          console.log('[CHAT_CONFIG] Configurações do chat carregadas com sucesso');
         } else {
-          console.warn('[CHAT_CONFIG] Configurações do chat incompletas no perfil');
           setChatConfig(null);
         }
       } catch (error) {
-        console.error('[CHAT_CONFIG] Erro ao carregar configurações do chat:', error);
         setChatConfig(null);
       }
     } else {
-      console.log('[CHAT_CONFIG] Instância não tem chat habilitado ou inbox_id:', {
-        chatEnabled: instance.chat_enabled,
-        hasInboxId: !!instance.admin_field_01
-      });
       setChatConfig(null);
     }
     
     setShowConnectModal(true);
-
-    console.log('[MODAL] Abrindo modal de conexão:', {
-      instanceName: instance.name,
-      status: instance.status,
-      hasQrCode: !!savedQrCode,
-      hasPairingCode: !!savedPairingCode,
-      chatEnabled: instance.chat_enabled,
-      hasInboxId: !!instance.admin_field_01
-    });
-
     if (instance.status === 'connecting') {
       setIsConnecting(!savedQrCode && !savedPairingCode); // Só mostrar loading se não tiver QR/pairing code
       if (instance.instance_token) {
@@ -2367,7 +2186,6 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('[BUTTON] Botão Criar clicado');
                   handleCreateInstance();
                 }}
                 disabled={creating}

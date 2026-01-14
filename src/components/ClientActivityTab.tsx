@@ -290,7 +290,6 @@ export default function ClientActivityTab() {
       setFailureLogs(failuresRecords as FailureLog[]);
 
     } catch (error) {
-      console.warn('Monitoramento da API usando dados simulados:', error);
       const fallback = createMockMonitoring(timeframe);
       setSummary(fallback.summary);
       setEndpointStats(fallback.endpoints);

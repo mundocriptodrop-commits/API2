@@ -48,7 +48,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
 
     // Verificar se a resposta é válida
     if (!statusResponse || (typeof statusResponse !== 'object')) {
-      console.log(`[STATUS_CHECK:${instanceName}] ⚠️ Resposta inválida - mantendo status atual`);
       return null;
     }
 
@@ -67,24 +66,16 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
     // Se tem QUALQUER indicador positivo de conexão, está conectado
     // PRIORIDADE: loggedIn e connected são os mais confiáveis
     if (hasLoggedInTrue || hasConnectedTrue) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - loggedIn/connected = true`);
       return true;
     }
-    
+
     // Se tem JID válido, está conectado (JID só existe quando conectado)
     if (hasJid) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - JID presente`);
       return true;
     }
-    
+
     // Se tem owner, phone_number, profileName ou status="connected", provavelmente está conectado
     if (hasOwner || hasPhoneNumber || hasProfileName || hasStatusConnected) {
-      console.log(`[STATUS_CHECK:${instanceName}] ✅ CONECTADO - Indicadores secundários:`, {
-        hasOwner: !!hasOwner,
-        hasPhoneNumber: !!hasPhoneNumber,
-        hasProfileName: !!hasProfileName,
-        hasStatusConnected: !!hasStatusConnected
-      });
       return true;
     }
 
@@ -104,9 +95,9 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                           (statusResponse?.pairingCode && statusResponse.pairingCode.length > 0);
     
     // Só retornar false se TODAS as condições forem verdadeiras
-    if (hasLoggedInFalse && 
-        hasConnectedFalse && 
-        !hasQrCode && 
+    if (hasLoggedInFalse &&
+        hasConnectedFalse &&
+        !hasQrCode &&
         !hasPairingCode &&
         statusData !== undefined && // Garantir que statusData existe
         instanceData !== undefined && // Garantir que instanceData existe
@@ -114,15 +105,13 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
         !hasOwner && // Garantir que não tem owner
         !hasPhoneNumber && // Garantir que não tem phone_number
         !hasProfileName) { // Garantir que não tem profileName
-      
-      console.log(`[STATUS_CHECK:${instanceName}] ❌ DESCONECTADO - Confirmação absoluta (todos indicadores negativos)`);
+
       return false;
     }
-    
+
     // IMPORTANTE: Se não temos certeza absoluta, retornamos null
     // Isso faz com que o status atual seja mantido (especialmente se estiver como "connected")
     // POLÍTICA: Em caso de dúvida, manter como conectado
-    console.log(`[STATUS_CHECK:${instanceName}] ⚠️ INDETERMINADO - Mantendo status atual (política conservadora)`);
     return null;
   }
 
@@ -194,7 +183,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                   instanceData?.status === 'connected';
                 
                 if (hasAnyPositiveIndicator) {
-                  console.log(`[SYNC] Instância ${instance.name}: Status indeterminado mas tem indicadores positivos na API - MANTENDO como conectada`);
                   // Atualizar dados se necessário (número, etc) mas manter como conectado
                   const updates: any = {};
                   if (phoneNumber && phoneNumber !== instance.phone_number) {
@@ -210,7 +198,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                 }
                 
                 // Se não tem indicadores positivos mas está conectado no banco, manter como conectado
-                console.log(`[SYNC] Instância ${instance.name}: Status indeterminado mas está conectada no banco - MANTENDO como conectada`);
                 continue;
               }
               
@@ -234,7 +221,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                 })
                 .eq('id', instance.id);
 
-              console.log(`[SYNC] Instância ${instance.name} está conectada na API - sincronizando banco`);
               await loadInstances();
               continue;
             }
@@ -254,7 +240,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
               
               // Se tem indicadores parciais, dar o benefício da dúvida e marcar como conectada
               if (hasPartialIndicators) {
-                console.log(`[SYNC] Instância ${instance.name}: Status indeterminado mas tem indicadores parciais - ATUALIZANDO para conectada`);
                 await supabase
                   .from('whatsapp_instances')
                   .update({
@@ -288,12 +273,10 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
               const hasPairingCode = statusData?.paircode || (status as any).instance?.paircode || (status as any).pairingCode;
               
               if (hasQrCode || hasPairingCode) {
-                console.log(`[SYNC] Instância ${instance.name}: Tem QR/Pairing code, mantendo como conectada`);
                 continue;
               }
 
               // VERIFICAÇÃO DUPLA: Antes de marcar como desconectado, verificar novamente na API
-              console.log(`[SYNC] ⚠️ API diz desconectado para ${instance.name} mas está conectada no banco - verificando novamente...`);
               try {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 const secondStatus = await whatsappApi.getInstanceStatus(instance.instance_token!);
@@ -312,11 +295,9 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                     })
                     .eq('id', instance.id);
 
-                  console.log(`[SYNC] ⚠️ Instância ${instance.name} desconectou na API (confirmado em verificação dupla) - sincronizando banco`);
                   await loadInstances();
                 } else {
                   // Segunda verificação não confirma desconexão - manter como conectado
-                  console.log(`[SYNC] ✅ Segunda verificação para ${instance.name} não confirma desconexão - mantendo como conectada`);
                   if (secondConnectionStatus === true) {
                     // Se na segunda verificação está conectado, atualizar dados
                     const secondPhoneNumber = extractPhoneNumber(secondStatus);
@@ -330,7 +311,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                 }
               } catch (secondError) {
                 // Se segunda verificação falhar, manter como conectado
-                console.warn(`[SYNC] Segunda verificação falhou para ${instance.name} - mantendo como conectado:`, secondError);
               }
             }
             // Se ambos estão conectados, atualizar dados se necessário
@@ -350,11 +330,9 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
             }
           } catch (error: any) {
             // Se houver erro, NÃO alteramos o status (API pode estar temporariamente indisponível)
-            console.warn(`[SYNC] Erro ao verificar instância ${instance.name} (mantendo status atual):`, error?.message || error);
           }
         }
       } catch (error) {
-        console.error('[SYNC] Erro geral na sincronização:', error);
       }
     }, 30000); // Verificar a cada 30 segundos
 
@@ -400,8 +378,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
               // PROTEÇÃO EXTRA: Antes de marcar como desconectado, verificar novamente
               // Se a instância está conectada no banco, fazer uma segunda verificação
               if (inst.status === 'connected') {
-                console.log(`[LOAD] ⚠️ API diz desconectado mas instância ${inst.name} está conectada no banco - verificando novamente...`);
-                
                 // Segunda verificação após pequeno delay
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 try {
@@ -417,13 +393,11 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
                     });
                   } else if (secondConnectionStatus === true) {
                     // Na segunda verificação está conectado - manter como conectado
-                    console.log(`[LOAD] ✅ Segunda verificação confirma que ${inst.name} está conectada`);
                     // Não adicionar à lista de atualizações - manter como conectado
                   }
                   // Se secondConnectionStatus === null, manter status atual (conectado)
                 } catch (secondError) {
                   // Se segunda verificação falhar, manter status atual (conectado)
-                  console.warn(`[LOAD] Segunda verificação falhou para ${inst.name} - mantendo como conectado`);
                 }
               } else {
                 // Se já está desconectado no banco e API confirma, pode atualizar
@@ -438,7 +412,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
           } catch (error) {
             // Se houver erro ao consultar a API, manter status atual do banco
             // NUNCA marcar como desconectado por erro na API
-            console.warn(`[LOAD] Erro ao verificar status da instância ${inst.name} na API (mantendo status atual):`, error);
           }
         }
 
@@ -476,7 +449,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
         setInstances(data || []);
       }
     } catch (error) {
-      console.error('Error loading instances:', error);
     } finally {
       setLoading(false);
     }
@@ -554,7 +526,6 @@ export default function ClientDashboardTab({ onRequestCreateInstance }: ClientDa
       setCopiedKey(`${id}-${type}`);
       setTimeout(() => setCopiedKey(null), 2000);
     } catch (error) {
-      console.error('Erro ao copiar valor:', error);
     }
   };
 

@@ -45,7 +45,6 @@ export default function ClientSubscriptionTab() {
 
       setPlans(data || []);
     } catch (error) {
-      console.error('Error loading plans:', error);
       showToast('Erro ao carregar planos', 'error');
     } finally {
       setIsLoading(false);

@@ -8,7 +8,6 @@ export default function AdminTopBar() {
     try {
       await signOut();
     } catch (error) {
-      console.error('Erro ao sair:', error);
       alert('Erro ao sair. Tente novamente.');
     }
   };

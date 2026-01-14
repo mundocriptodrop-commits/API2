@@ -33,7 +33,6 @@ export const messagingApi = {
 
       return await response.json();
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
       throw error;
     }
   },

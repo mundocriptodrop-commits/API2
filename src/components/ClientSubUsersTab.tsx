@@ -29,7 +29,6 @@ export default function ClientSubUsersTab() {
       const data = await clientSubUsersApi.listSubUsers();
       setSubUsers(data.subUsers || []);
     } catch (error: any) {
-      console.error('Error loading sub-users:', error);
       alert(error.message || 'Erro ao carregar sub-usuários');
     } finally {
       setLoading(false);
@@ -70,10 +69,10 @@ export default function ClientSubUsersTab() {
 
       alert(`Sub-usuário criado!\nEmail: ${formData.email}\nSenha: ${formData.password}`);
       setShowModal(false);
-      setFormData({ 
-        email: '', 
-        password: '', 
-        maxInstances: 1, 
+      setFormData({
+        email: '',
+        password: '',
+        maxInstances: 1,
         configureChat: false,
         chatUrl: '',
         chatApiKey: '',
@@ -81,7 +80,6 @@ export default function ClientSubUsersTab() {
       });
       loadSubUsers();
     } catch (error: any) {
-      console.error('Error creating sub-user:', error);
       alert(error.message || 'Erro ao criar sub-usuário');
     }
   }
@@ -103,10 +101,10 @@ export default function ClientSubUsersTab() {
       alert(message);
       setShowModal(false);
       setEditingSubUser(null);
-      setFormData({ 
-        email: '', 
-        password: '', 
-        maxInstances: 1, 
+      setFormData({
+        email: '',
+        password: '',
+        maxInstances: 1,
         configureChat: false,
         chatUrl: '',
         chatApiKey: '',
@@ -114,7 +112,6 @@ export default function ClientSubUsersTab() {
       });
       loadSubUsers();
     } catch (error: any) {
-      console.error('Error updating sub-user:', error);
       alert(error.message || 'Erro ao atualizar sub-usuário');
     }
   }
@@ -126,7 +123,6 @@ export default function ClientSubUsersTab() {
       await clientSubUsersApi.deleteSubUser(subUserId);
       loadSubUsers();
     } catch (error: any) {
-      console.error('Error deleting sub-user:', error);
       alert(error.message || 'Erro ao excluir sub-usuário');
     }
   }

@@ -512,7 +512,6 @@ export default function ClientApiTab() {
       if (error) throw error;
       setInstances(data || []);
     } catch (error) {
-      console.error('Erro ao carregar instâncias:', error);
     } finally {
       setLoadingInstances(false);
     }
@@ -800,7 +799,6 @@ export default function ClientApiTab() {
 
     // Prevenir múltiplas requisições simultâneas
     if (requestInProgressRef.current || isLoading) {
-      console.warn('Requisição já em andamento, ignorando clique duplicado');
       return;
     }
 

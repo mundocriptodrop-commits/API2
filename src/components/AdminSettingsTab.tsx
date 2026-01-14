@@ -22,7 +22,6 @@ export default function AdminSettingsTab() {
       if (error) throw error;
       setWhatsappToken(data?.value || '');
     } catch (error) {
-      console.error('Error loading settings:', error);
     } finally {
       setLoading(false);
     }
@@ -40,7 +39,6 @@ export default function AdminSettingsTab() {
 
       alert('Configurações salvas com sucesso!');
     } catch (error: any) {
-      console.error('Error saving settings:', error);
       alert(error.message || 'Erro ao salvar configurações');
     } finally {
       setSaving(false);

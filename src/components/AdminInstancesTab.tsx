@@ -47,7 +47,6 @@ export default function AdminInstancesTab() {
       setInstances(instancesWithUsers);
       setUsers((usersResult.data || []).filter((u: any) => u.role === 'client'));
     } catch (error) {
-      console.error('Error loading instances:', error);
     } finally {
       setLoading(false);
     }

@@ -26,7 +26,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
-        console.error('Session error:', error);
         supabase.auth.signOut();
         setLoading(false);
         return;
@@ -63,14 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
 
       if (!data) {
-        console.warn('Profile not found for user:', userId);
         setUser(null);
         setProfile(null);
       } else {
         setProfile(data);
       }
     } catch (error) {
-      console.error('Error loading profile:', error);
       setUser(null);
       setProfile(null);
     } finally {
@@ -93,7 +90,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error) {
-      console.error('Error signing out:', error);
       throw error;
     }
   };

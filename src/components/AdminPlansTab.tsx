@@ -67,7 +67,6 @@ export default function AdminPlansTab() {
 
       setPlans(data || []);
     } catch (error) {
-      console.error('Error loading plans:', error);
       showToast('Erro ao carregar planos', 'error');
     } finally {
       setIsLoading(false);
@@ -158,7 +157,6 @@ export default function AdminPlansTab() {
       handleCloseForm();
       loadPlans();
     } catch (error) {
-      console.error('Error saving plan:', error);
       showToast('Erro ao salvar plano', 'error');
     }
   };
@@ -176,7 +174,6 @@ export default function AdminPlansTab() {
       showToast('Plano excluído com sucesso!', 'success');
       loadPlans();
     } catch (error) {
-      console.error('Error deleting plan:', error);
       showToast('Erro ao excluir plano', 'error');
     }
   };
@@ -192,7 +189,6 @@ export default function AdminPlansTab() {
       showToast(`Plano ${!plan.is_active ? 'ativado' : 'desativado'} com sucesso!`, 'success');
       loadPlans();
     } catch (error) {
-      console.error('Error toggling plan:', error);
       showToast('Erro ao alterar status do plano', 'error');
     }
   };

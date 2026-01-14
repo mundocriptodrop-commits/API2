@@ -27,10 +27,7 @@ export async function invalidateTokenCache(token: string): Promise<void> {
 
     // Opção 2: Cache expira automaticamente em 5 minutos
     // Não é necessário fazer nada - o cache expirará naturalmente
-    
-    console.log(`Cache do token será invalidado automaticamente em até 5 minutos`);
   } catch (error) {
-    console.error('Erro ao invalidar cache:', error);
     // Não falha a operação se cache invalidation falhar
   }
 }

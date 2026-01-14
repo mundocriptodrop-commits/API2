@@ -48,10 +48,9 @@ export default function AdminUsersTab() {
           };
         })
       );
-      
+
       setProfiles(usersWithSubCount);
     } catch (error) {
-      console.error('Error loading profiles:', error);
     } finally {
       setLoading(false);
     }
@@ -82,7 +81,6 @@ export default function AdminUsersTab() {
           : p
       ));
     } catch (error) {
-      console.error('Error loading sub-users:', error);
     }
   }
 
@@ -107,7 +105,6 @@ export default function AdminUsersTab() {
       setFormData({ email: '', password: '', maxInstances: 5 });
       loadProfiles();
     } catch (error: any) {
-      console.error('Error creating user:', error);
       alert(error.message || 'Erro ao criar usuário');
     }
   }
@@ -129,7 +126,6 @@ export default function AdminUsersTab() {
       setFormData({ email: '', password: '', maxInstances: 5 });
       loadProfiles();
     } catch (error: any) {
-      console.error('Error updating profile:', error);
       alert(error.message || 'Erro ao atualizar usuário');
     }
   }
@@ -157,10 +153,9 @@ export default function AdminUsersTab() {
           return newCache;
         });
       }
-      
+
       loadProfiles();
     } catch (error) {
-      console.error('Error deleting profile:', error);
       alert('Erro ao excluir usuário');
     }
   }

@@ -67,16 +67,11 @@ export interface InstanceStatusResponse {
 
 export const whatsappApi = {
   async createInstance(name: string, systemName = 'apilocal'): Promise<CreateInstanceResponse> {
-    console.log('Buscando token admin...');
     const adminToken = await getAdminToken();
-    console.log('Token encontrado:', adminToken ? 'Sim' : 'Não');
 
     if (!adminToken) {
       throw new Error('Token de administração não configurado. Configure nas Configurações do painel administrativo.');
     }
-
-    console.log('Fazendo requisição para API:', `${API_BASE_URL}/instance/init`);
-    console.log('Payload:', { name, systemName });
 
     const response = await fetch(`${UAZAPI_BASE_URL}/instance/init`, {
       method: 'POST',
@@ -87,12 +82,8 @@ export const whatsappApi = {
       body: JSON.stringify({ name, systemName }),
     });
 
-    console.log('Status da resposta:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Erro da API (status):', response.status);
-      console.error('Erro da API (texto):', errorText);
 
       try {
         const errorData = JSON.parse(errorText);
@@ -103,14 +94,11 @@ export const whatsappApi = {
     }
 
     const responseText = await response.text();
-    console.log('Resposta da API (texto bruto):', responseText);
 
     let data;
     try {
       data = JSON.parse(responseText);
-      console.log('Resposta da API (JSON parseado):', data);
     } catch (parseError) {
-      console.error('Erro ao parsear JSON:', parseError);
       throw new Error('Resposta inválida da API: não é um JSON válido');
     }
 
@@ -121,7 +109,6 @@ export const whatsappApi = {
 
     // Verificar se tem o campo token
     if (!data.token) {
-      console.error('Resposta sem token:', data);
       throw new Error('API não retornou um token de instância');
     }
 
@@ -129,9 +116,6 @@ export const whatsappApi = {
   },
 
   async connectInstance(token: string, phone?: string): Promise<ConnectInstanceResponse> {
-    console.log('Conectando instância com token:', token);
-    console.log('Telefone:', phone || 'Usando QR Code');
-
     const response = await fetch(`${UAZAPI_BASE_URL}/instance/connect`, {
       method: 'POST',
       headers: {
@@ -141,17 +125,12 @@ export const whatsappApi = {
       body: JSON.stringify(phone ? { phone } : {}),
     });
 
-    console.log('Status da resposta de conexão:', response.status);
-
     const responseText = await response.text();
-    console.log('Resposta de conexão (texto):', responseText);
 
     let data;
     try {
       data = JSON.parse(responseText);
-      console.log('Resposta de conexão (JSON):', data);
     } catch (parseError) {
-      console.error('Erro ao parsear JSON de conexão:', parseError);
       throw new Error('Resposta inválida da API de conexão');
     }
 
@@ -159,7 +138,6 @@ export const whatsappApi = {
       const errorMessage = data.message || data.error || `Erro ao conectar instância: ${response.status}`;
 
       if (response.status === 409) {
-        console.log('Erro 409: Instância já conectada ou em conexão');
         throw new Error('Instância já está conectada ou em processo de conexão. Tente desconectar primeiro.');
       }
 
@@ -216,7 +194,6 @@ export const whatsappApi = {
   },
 
   async logoutInstance(token: string): Promise<{ success: boolean }> {
-    console.log('Fazendo logout da instância:', token);
     const response = await fetch(`${UAZAPI_BASE_URL}/instance/logout`, {
       method: 'POST',
       headers: {
@@ -224,8 +201,6 @@ export const whatsappApi = {
         'token': token,
       },
     });
-
-    console.log('Status do logout:', response.status);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

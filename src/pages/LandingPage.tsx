@@ -45,7 +45,6 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       if (error) throw error;
       setPlans(data || []);
     } catch (error) {
-      console.error('Error loading plans:', error);
     } finally {
       setLoading(false);
     }

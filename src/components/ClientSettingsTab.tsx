@@ -46,7 +46,6 @@ export default function ClientSettingsTab() {
       if (error) throw error;
       setChatUrl(data?.chat_url || '');
     } catch (error) {
-      console.error('Error loading chat URL:', error);
       showToast('Erro ao carregar URL do Chat', 'error');
     } finally {
       setLoadingChatUrl(false);
@@ -65,7 +64,6 @@ export default function ClientSettingsTab() {
       if (error) throw error;
       setChatApiKey(data?.chat_api_key || '');
     } catch (error) {
-      console.error('Error loading chat API key:', error);
       showToast('Erro ao carregar API Key do Chat', 'error');
     } finally {
       setLoadingChatApiKey(false);
@@ -84,7 +82,6 @@ export default function ClientSettingsTab() {
       if (error) throw error;
       setChatAccountId(data?.chat_account_id?.toString() || '');
     } catch (error) {
-      console.error('Error loading chat account ID:', error);
       showToast('Erro ao carregar Account ID do Chat', 'error');
     } finally {
       setLoadingChatAccountId(false);
@@ -120,10 +117,9 @@ export default function ClientSettingsTab() {
       
       // Recarrega o profile para ter os valores atualizados disponíveis
       await refreshProfile();
-      
+
       showToast('Configurações de integração salvas com sucesso!', 'success');
     } catch (error: any) {
-      console.error('Error saving integrations:', error);
       showToast(error.message || 'Erro ao salvar configurações de integração', 'error');
     } finally {
       setSavingIntegrations(false);

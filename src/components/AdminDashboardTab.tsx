@@ -30,7 +30,6 @@ export default function AdminDashboardTab() {
         connectingInstances: instances.filter((i) => i.status === 'connecting').length,
       });
     } catch (error) {
-      console.error('Error loading stats:', error);
     }
   }
 
