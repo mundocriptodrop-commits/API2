@@ -294,12 +294,13 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
     const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
 
     // Se tem JID E está loggedIn E connected, está REALMENTE conectado
-    // Isso é mais confiável que o campo status da API
+    // IMPORTANTE: Isso prevalece sobre QR code em cache ou status desatualizado da API
     if (hasLoggedInTrue && hasConnectedTrue && hasJid) {
       return 'connected';
     }
 
-    // PRIORIDADE 2: Verificar QR code ou pairing code - se houver, está "connecting"
+    // PRIORIDADE 2: Se tem apenas loggedIn ou connected (mas não JID), pode estar conectando
+    // Verificar se tem QR code ou pairing code válido
     const hasQrCode = (instanceData?.qrcode && String(instanceData.qrcode).trim().length > 0) ||
                      (statusResponse?.qrCode && String(statusResponse.qrCode).trim().length > 0) ||
                      (statusData?.qrcode && String(statusData.qrcode).trim().length > 0) ||
@@ -309,11 +310,18 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
                           (statusData?.paircode && String(statusData.paircode).trim().length > 0) ||
                           (statusData?.pairingCode && String(statusData.pairingCode).trim().length > 0);
 
-    if (hasQrCode || hasPairingCode) {
+    // Se tem QR/pairing code E NÃO está conectado (sem JID), está conectando
+    if ((hasQrCode || hasPairingCode) && !hasJid) {
       return 'connecting';
     }
 
-    // PRIORIDADE 3: Usar o campo status da API como fallback
+    // PRIORIDADE 3: Verificar outros indicadores de conexão
+    // Se tem JID sozinho (mesmo sem loggedIn/connected explícitos), provavelmente conectado
+    if (hasJid) {
+      return 'connected';
+    }
+
+    // PRIORIDADE 4: Usar o campo status da API como fallback
     // Só usar isso se não tivermos indicadores mais confiáveis
     const apiStatus = instanceData?.status;
     if (apiStatus && typeof apiStatus === 'string') {
