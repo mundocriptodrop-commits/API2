@@ -287,14 +287,16 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return null;
     }
 
-    // PRIORIDADE 1: Usar o campo status diretamente da API se disponível
-    // A API retorna: "disconnected", "connecting", "connected"
-    const apiStatus = instanceData?.status;
-    if (apiStatus && typeof apiStatus === 'string') {
-      const normalizedStatus = apiStatus.toLowerCase();
-      if (normalizedStatus === 'connected' || normalizedStatus === 'connecting' || normalizedStatus === 'disconnected') {
-        return normalizedStatus as 'connected' | 'connecting' | 'disconnected';
-      }
+    // PRIORIDADE 1: Verificar indicadores REAIS de conexão PRIMEIRO
+    // Estes são os indicadores mais confiáveis de que está realmente conectado
+    const hasLoggedInTrue = statusData?.loggedIn === true;
+    const hasConnectedTrue = statusData?.connected === true;
+    const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
+
+    // Se tem JID E está loggedIn E connected, está REALMENTE conectado
+    // Isso é mais confiável que o campo status da API
+    if (hasLoggedInTrue && hasConnectedTrue && hasJid) {
+      return 'connected';
     }
 
     // PRIORIDADE 2: Verificar QR code ou pairing code - se houver, está "connecting"
@@ -311,16 +313,14 @@ export default function ClientInstancesTab({ openCreate = false, onCloseCreate }
       return 'connecting';
     }
 
-    // PRIORIDADE 3: Verificar indicadores de conexão (APENAS se não tiver status direto)
-    // IMPORTANTE: Só usar indicadores se NÃO tiver o campo status direto da API
-    const hasLoggedInTrue = statusData?.loggedIn === true;
-    const hasConnectedTrue = statusData?.connected === true;
-    const hasJid = statusData?.jid && typeof statusData.jid === 'string' && statusData.jid.includes('@');
-
-    // CRÍTICO: Só marcar como "connected" se TODOS os indicadores estiverem presentes
-    // Não assumir "connected" apenas com um indicador parcial
-    if (hasLoggedInTrue && hasConnectedTrue && hasJid) {
-      return 'connected';
+    // PRIORIDADE 3: Usar o campo status da API como fallback
+    // Só usar isso se não tivermos indicadores mais confiáveis
+    const apiStatus = instanceData?.status;
+    if (apiStatus && typeof apiStatus === 'string') {
+      const normalizedStatus = apiStatus.toLowerCase();
+      if (normalizedStatus === 'connected' || normalizedStatus === 'connecting' || normalizedStatus === 'disconnected') {
+        return normalizedStatus as 'connected' | 'connecting' | 'disconnected';
+      }
     }
 
     // PRIORIDADE 4: Verificar indicadores de desconexão
